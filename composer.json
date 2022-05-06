@@ -1,0 +1,54 @@
+{
+    "name": "jasirilabs/laravel-selcom",
+    "description": "The Selcom Intergation for Laravel makes it easy for developers to access Selcom in their Laravel applications, and build robust applications and software using services like Checkout API etc.",
+    "keywords": [
+        "jasirilabs",
+        "laravel-selcom"
+    ],
+    "homepage": "https://github.com/jasirilabs/laravel-selcom",
+    "license": "MIT",
+    "type": "library",
+    "authors": [
+        {
+            "name": "Bruno Alfred",
+            "email": "bruno@jasirilabs.com",
+            "role": "Developer"
+        }
+    ],
+    "require": {
+        "php": "^8.0",
+        "illuminate/support": "^9.0"
+    },
+    "require-dev": {
+        "orchestra/testbench": "^7.0",
+        "phpunit/phpunit": "^9.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "JasiriLabs\\LaravelSelcom\\": "src"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "JasiriLabs\\LaravelSelcom\\Tests\\": "tests"
+        }
+    },
+    "scripts": {
+        "test": "vendor/bin/phpunit",
+        "test-coverage": "vendor/bin/phpunit --coverage-html coverage"
+
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Jasirilabs\\LaravelSelcom\\LaravelSelcomServiceProvider"
+            ],
+            "aliases": {
+                "LaravelSelcom": "Jasirilabs\\LaravelSelcom\\LaravelSelcomFacade"
+            }
+        }
+    }
+}
