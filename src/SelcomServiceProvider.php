@@ -4,7 +4,7 @@ namespace JasiriLabs\LaravelSelcom;
 
 use Illuminate\Support\ServiceProvider;
 
-class LaravelSelcomServiceProvider extends ServiceProvider
+class SelcomServiceProvider extends ServiceProvider
 {
     /**
      * Bootstrap the application services.
@@ -54,7 +54,7 @@ class LaravelSelcomServiceProvider extends ServiceProvider
 
         // Register the main class to use with the facade
         $this->app->singleton('laravel-selcom', function () {
-            return new LaravelSelcom;
+            return new Selcom;
         });
     }
 }

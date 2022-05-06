@@ -3,9 +3,9 @@
 namespace JasiriLabs\LaravelSelcom;
 
 use Illuminate\Support\Facades\Http;
-use JetBrains\PhpStorm\ArrayShape;
 
-class LaravelSelcom
+
+class Selcom
 {
     
     protected array $config;
@@ -29,9 +29,7 @@ class LaravelSelcom
     }
 
 
-    #[ArrayShape(['payment_gateway_url' => "false|string"])]
-
-    public function sendPostRequest($url, array $data, $digest, $signed_fields): array
+    public function sendPostRequest($url, array $data): array
     {
         date_default_timezone_set('Africa/Dar_es_Salaam');
         $requestTimestamp = date('c');
