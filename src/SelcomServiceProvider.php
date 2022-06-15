@@ -1,6 +1,6 @@
 <?php
 
-namespace JasiriLabs\LaravelSelcom;
+namespace JasiriLabs\Selcom;
 
 use Illuminate\Support\ServiceProvider;
 

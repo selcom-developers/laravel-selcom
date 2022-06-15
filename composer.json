@@ -21,16 +21,16 @@
     },
     "require-dev": {
         "orchestra/testbench": "^7.0",
-        "phpunit/phpunit": "^9.0"
+        "pestphp/pest": "^1.21"
     },
     "autoload": {
         "psr-4": {
-            "JasiriLabs\\LaravelSelcom\\": "src"
+            "JasiriLabs\\Selcom\\": "src"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "JasiriLabs\\LaravelSelcom\\Tests\\": "tests"
+            "JasiriLabs\\Selcom\\Tests\\": "tests"
         }
     },
     "scripts": {
@@ -39,7 +39,10 @@
 
     },
     "config": {
-        "sort-packages": true
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        }
     },
     "extra": {
         "laravel": {

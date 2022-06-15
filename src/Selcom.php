@@ -1,6 +1,6 @@
 <?php
 
-namespace JasiriLabs\LaravelSelcom;
+namespace JasiriLabs\Selcom;
 
 use Illuminate\Support\Facades\Http;
 
@@ -9,6 +9,7 @@ class Selcom
 {
     
     protected array $config;
+    
 
     public function __construct(array $config)
     {

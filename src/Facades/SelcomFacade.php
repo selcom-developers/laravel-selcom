@@ -1,6 +1,6 @@
 <?php
 
-namespace JasiriLabs\LaravelSelcom;
+namespace JasiriLabs\Selcom\Facades;
 
 use Illuminate\Support\Facades\Facade;
 
