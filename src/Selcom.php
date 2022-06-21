@@ -2,59 +2,66 @@
 
 namespace JasiriLabs\Selcom;
 
-use Illuminate\Support\Facades\Http;
+use JasiriLabs\Selcom\Concerns\Checkout;
 
-
-class Selcom
+class Selcom implements Checkout
 {
-    
-    protected array $config;
-    
 
-    public function __construct(array $config)
+    private SelcomClient $client;
+
+    public function  __construct()
     {
-        $this->config = $config['laravel-selcom'];
+        $this->client = new SelcomClient(config('laravel-selcom'));
     }
 
-
-    public function computeSignature($data, $signed_fields, $requestTimestamp): string
+    
+    public function createOrder(array $params)
     {
-        $fieldsOrder = explode(',', $signed_fields);
-        $signData = "timestamp=$requestTimestamp";
+       $response =  $this->client->post('/checkout/create-order', $params);
 
-        foreach ($fieldsOrder as $key) {
-            $signData .= "&$key=" . $data[$key];
-        }
-
-        return base64_encode(hash_hmac('sha256', $signData, $this->config['api_secret'], true));
-    }
-
-
-    public function sendPostRequest($url, array $data): array
-    {
-        date_default_timezone_set('Africa/Dar_es_Salaam');
-        $requestTimestamp = date('c');
-
-        $endpointUrl = $this->config['base_url'] . $url;
-
-        $signed_fields  = implode(',', array_keys($data));
-
-        $response = Http::withHeaders([
-            'Content-Type' => 'application/json;charset=\"utf-8\"',
-            'Accept' => 'application/json',
-            'Cache-Control' => 'no-cache',
-            'Authorization' => 'SELCOM ' . base64_encode($this->config['api_key']),
-            'Digest-Method' => 'HS256',
-            'Digest' => $this->computeSignature($data, $signed_fields, $requestTimestamp),
-            'Timestamp' => $requestTimestamp,
-            'Signed-Fields' => $signed_fields,
-        ])->post($endpointUrl, $data);
-
-        $paymentGatewayUrl = base64_decode(json_decode($response->body(), true)['data'][0]['payment_gateway_url']);
+        $paymentGatewayUrl = base64_decode(json_decode($response->body(), true)['params'][0]['payment_gateway_url']);
 
         return [
             'payment_gateway_url' => $paymentGatewayUrl,
         ];
     }
 
+    public function createOrderMinimal(array $params)
+    {
+        $response =  $this->client->post('/checkout/create-order-minimal', $params);
+
+        $paymentGatewayUrl = base64_decode(json_decode($response->body(), true)['params'][0]['payment_gateway_url']);
+
+        return [
+            'payment_gateway_url' => $paymentGatewayUrl,
+        ];
+    }
+
+
+    public function getOrderStatus(string $orderId)
+    {
+        $response =  $this->client->get('/checkout/order-status', ['order_id' => $orderId]);
+
+        return base64_decode(json_decode($response->body(), true));
+    }
+
+
+    public function deleteOrder(string $orderId)
+    {
+        $response =  $this->client->delete('/checkout/cancel-order', ['order_id' => $orderId]);
+
+        return base64_decode(json_decode($response->body(), true));
+    }
+
+
+    public function listOrder(string $fromDate, string $toDate)
+    {
+        $response =  $this->client->get('/checkout/list-order', ['from_date' => $fromDate, 'to_date' => $toDate]);
+
+        return base64_decode(json_decode($response->body(), true));
+    }
+
+
+
 }
+

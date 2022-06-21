@@ -21,7 +21,4 @@ return [
       
       'api_secret' => env('SELCOM_API_SECRET_KEY'),
 
-
-      
-
 ];
