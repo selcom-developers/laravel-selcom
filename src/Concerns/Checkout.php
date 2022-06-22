@@ -18,7 +18,7 @@ interface Checkout
 
 
 
-	public function deleteOrder(string $orderId);
+	public function cancelOrder(string $orderId);
 
 
 

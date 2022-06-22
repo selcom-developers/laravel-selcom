@@ -39,7 +39,7 @@ class Selcom implements Checkout
     }
 
 
-    public function deleteOrder(string $orderId)
+    public function cancelOrder(string $orderId)
     {
         $response =  $this->client->delete('/checkout/cancel-order', ['order_id' => $orderId]);
 
@@ -47,7 +47,7 @@ class Selcom implements Checkout
     }
 
 
-    public function listOrder(string $fromDate, string $toDate)
+    public function listOrders(string $fromDate, string $toDate)
     {
         $response =  $this->client->get('/checkout/list-order', ['from_date' => $fromDate, 'to_date' => $toDate]);
 
