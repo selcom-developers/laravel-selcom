@@ -17,9 +17,9 @@ class Selcom implements Checkout
     
     public function createOrder(array $params)
     {
-       $response =  $this->client->post('/checkout/create-order', $params);
+        $responseBody =  $this->client->post('/checkout/create-order', $params);
 
-        $paymentGatewayUrl = base64_decode(json_decode($response->body(), true)['data'][0]['payment_gateway_url']);
+        $paymentGatewayUrl = base64_decode($responseBody['data'][0]['payment_gateway_url']);
 
         return [
             'payment_gateway_url' => $paymentGatewayUrl,
