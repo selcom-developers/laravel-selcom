@@ -3,7 +3,8 @@
     "description": "The Selcom Integration for Laravel makes it easy for developers to access Selcom in their Laravel applications, and build robust applications and software using services like Checkout API etc.",
     "keywords": [
         "jasirilabs",
-        "laravel-selcom"
+        "laravel-selcom",
+        "checkout"
     ],
     "homepage": "https://github.com/jasirilabs/laravel-selcom",
     "license": "MIT",
@@ -34,8 +35,8 @@
         }
     },
     "scripts": {
-        "test": "vendor/bin/phpunit",
-        "test-coverage": "vendor/bin/phpunit --coverage-html coverage"
+        "test": "vendor/bin/pest",
+        "test-coverage": "vendor/bin/pest --coverage-html coverage"
 
     },
     "config": {
@@ -47,10 +48,10 @@
     "extra": {
         "laravel": {
             "providers": [
-                "SelcomServiceProvider"
+                "JasiriLabs\\Selcom\\SelcomServiceProvider"
             ],
             "aliases": {
-                "LaravelSelcom": "SelcomFacade"
+                "Selcom": "JasiriLabs\\Selcom\\Facades\\Selcom"
             }
         }
     }
