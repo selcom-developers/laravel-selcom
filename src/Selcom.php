@@ -41,9 +41,7 @@ class Selcom implements Checkout
 
     public function cancelOrder(string $orderId)
     {
-        $response =  $this->client->delete('/checkout/cancel-order', ['order_id' => $orderId]);
-
-
+        return $this->client->delete('/checkout/cancel-order', ['order_id' => $orderId]);
     }
 
 

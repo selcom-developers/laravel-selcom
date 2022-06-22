@@ -93,7 +93,7 @@ class SelcomClient
 
         $signed_fields  = implode(',', array_keys($params));
 
-        return Http::withHeaders([
+        $response = Http::withHeaders([
             'Content-Type' => 'application/json;charset=\"utf-8\"',
             'Accept' => 'application/json',
             'Cache-Control' => 'no-cache',
@@ -103,6 +103,16 @@ class SelcomClient
             'Timestamp' => $requestTimestamp,
             'Signed-Fields' => $signed_fields,
         ])->delete($this->buildUrl($endpointUrl, $params));
+
+        $responseBody =  json_decode($response->body(), true);
+
+        if ($responseBody['resultcode'] != '000')
+        {
+            throw new \Exception($responseBody['message']);
+        }
+
+        return $responseBody;
+
     }
 
 
