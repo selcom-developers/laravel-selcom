@@ -29,7 +29,7 @@ interface Checkout
 
 
 
-	public function listOrder(string $fromDate, string $toDate);
+	public function listOrders(string $fromDate, string $toDate);
 
 
 
