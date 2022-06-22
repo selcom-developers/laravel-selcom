@@ -33,9 +33,9 @@ class Selcom implements Checkout
 
     public function getOrderStatus(string $orderId)
     {
-        $response =  $this->client->get('/checkout/order-status', ['order_id' => $orderId]);
+        $responseBody =  $this->client->get('/checkout/order-status', ['order_id' => $orderId]);
 
-        return base64_decode(json_decode($response->body(), true));
+        return $responseBody['data'][0];
     }
 
 
@@ -43,15 +43,15 @@ class Selcom implements Checkout
     {
         $response =  $this->client->delete('/checkout/cancel-order', ['order_id' => $orderId]);
 
-        return base64_decode(json_decode($response->body(), true));
+
     }
 
 
     public function listOrders(string $fromDate, string $toDate)
     {
-        $response =  $this->client->get('/checkout/list-order', ['from_date' => $fromDate, 'to_date' => $toDate]);
+        $responseBody =  $this->client->get('/checkout/list-order', ['from_date' => $fromDate, 'to_date' => $toDate]);
 
-        return base64_decode(json_decode($response->body(), true));
+        return $responseBody['data'][0];
     }
 
 
