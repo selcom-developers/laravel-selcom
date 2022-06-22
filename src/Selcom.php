@@ -19,22 +19,15 @@ class Selcom implements Checkout
     {
         $responseBody =  $this->client->post('/checkout/create-order', $params);
 
-        $paymentGatewayUrl = base64_decode($responseBody['data'][0]['payment_gateway_url']);
+        return $responseBody['data'][0];
 
-        return [
-            'payment_gateway_url' => $paymentGatewayUrl,
-        ];
     }
 
     public function createOrderMinimal(array $params)
     {
-        $response =  $this->client->post('/checkout/create-order-minimal', $params);
+        $responseBody =  $this->client->post('/checkout/create-order-minimal', $params);
 
-        $paymentGatewayUrl = base64_decode(json_decode($response->body(), true)['data'][0]['payment_gateway_url']);
-
-        return [
-            'payment_gateway_url' => $paymentGatewayUrl,
-        ];
+        return $responseBody['data'][0];
     }
 
 
