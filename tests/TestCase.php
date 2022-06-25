@@ -13,7 +13,7 @@ class TestCase extends Orchestra
         parent::setUp();
     }
 
-    protected function getPackageProviders($app)
+    protected function getPackageProviders($app): array
     {
         return [SelcomServiceProvider::class,];
     }
