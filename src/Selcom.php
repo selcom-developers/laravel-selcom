@@ -17,25 +17,19 @@ class Selcom implements Checkout
     
     public function createOrder(array $params)
     {
-        $responseBody =  $this->client->post('/checkout/create-order', $params);
-
-        return $responseBody['data'][0];
+        return $this->client->post('/checkout/create-order', $params);
 
     }
 
     public function createOrderMinimal(array $params)
     {
-        $responseBody =  $this->client->post('/checkout/create-order-minimal', $params);
-
-        return $responseBody['data'][0];
+        return $this->client->post('/checkout/create-order-minimal', $params);
     }
 
 
     public function getOrderStatus(string $orderId)
     {
-        $responseBody =  $this->client->get('/checkout/order-status', ['order_id' => $orderId]);
-
-        return $responseBody['data'][0];
+        return $this->client->get('/checkout/order-status', ['order_id' => $orderId]);
     }
 
 
@@ -47,9 +41,7 @@ class Selcom implements Checkout
 
     public function listOrders(string $fromDate, string $toDate)
     {
-        $responseBody =  $this->client->get('/checkout/list-order', ['from_date' => $fromDate, 'to_date' => $toDate]);
-
-        return $responseBody['data'][0];
+        return $this->client->get('/checkout/list-order', ['from_date' => $fromDate, 'to_date' => $toDate]);
     }
 
 
