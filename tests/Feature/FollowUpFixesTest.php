@@ -46,6 +46,9 @@ final class FollowUpFixesTest extends TestCase
         \assert($router instanceof \Illuminate\Routing\Router);
         $routes = $router->getRoutes();
         \assert($routes instanceof \Illuminate\Routing\RouteCollection);
+        foreach ($routes as $route) {
+            $route->prepareForSerialization(); // closures in the framework's own routes are serialised, as route:cache does
+        }
         $routes->refreshNameLookups();
         $routes->refreshActionLookups();
         $compiled = $routes->compile();
