@@ -313,7 +313,7 @@ composer install
 composer check      # validate, Larastan (level 8), PHPUnit
 ```
 
-The suite runs every case and reject in `signing.json` (20 and 11), every response scenario (120) and every webhook sample (15) from the copy of the spec vectors in `resources/vectors`, without network. `scripts/refresh-spec.sh [tag]` refreshes that copy and rewrites `SPEC_VERSION`; CI checks the copy is byte-identical to the spec at that tag.
+The suite runs every case and reject in `signing.json`, every response scenario and every webhook sample from the copy of the spec vectors in `resources/vectors`, without network. `scripts/refresh-spec.sh [tag]` refreshes that copy and rewrites `SPEC_VERSION`; CI checks the copy is byte-identical to the spec at that tag.
 
 ## Security
 
