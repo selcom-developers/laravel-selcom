@@ -1,58 +1,75 @@
 {
-    "name": "jasirilabs/laravel-selcom",
-    "description": "The Selcom Integration for Laravel makes it easy for developers to access Selcom in their Laravel applications, and build robust applications and software using services like Checkout API etc.",
-    "keywords": [
-        "jasirilabs",
-        "laravel-selcom",
-        "checkout"
-    ],
-    "homepage": "https://github.com/jasirilabs/laravel-selcom",
-    "license": "MIT",
+    "name": "selcom-developers/laravel-selcom",
+    "description": "Laravel integration for the Selcom API gateway: config, container bindings, webhooks, optional models, commands and testing helpers, built on selcom-developers/selcom-php. Not affiliated with Selcom Paytech Ltd.",
+    "version": "0.1.0",
     "type": "library",
-    "authors": [
-        {
-            "name": "Bruno Alfred",
-            "email": "bruno@jasirilabs.com",
-            "role": "Developer"
-        }
+    "license": "Apache-2.0",
+    "keywords": ["selcom", "laravel", "tanzania", "payments", "mobile-money", "webhooks"],
+    "homepage": "https://github.com/selcom-developers/laravel-selcom",
+    "support": {
+        "issues": "https://github.com/selcom-developers/laravel-selcom/issues",
+        "source": "https://github.com/selcom-developers/laravel-selcom"
+    },
+    "repositories": [
+        { "type": "vcs", "url": "https://github.com/selcom-developers/selcom-php" }
     ],
     "require": {
-        "php": "^8.0",
-        "illuminate/support": "^9.0"
+        "php": "^8.2",
+        "ext-json": "*",
+        "illuminate/cache": "^12.0 || ^13.0",
+        "illuminate/console": "^12.0 || ^13.0",
+        "illuminate/contracts": "^12.0 || ^13.0",
+        "illuminate/database": "^12.0 || ^13.0",
+        "illuminate/events": "^12.0 || ^13.0",
+        "illuminate/http": "^12.0 || ^13.0",
+        "illuminate/queue": "^12.0 || ^13.0",
+        "illuminate/routing": "^12.0 || ^13.0",
+        "illuminate/support": "^12.0 || ^13.0",
+        "psr/clock": "^1.0",
+        "selcom-developers/selcom-php": "dev-feat/v1"
     },
     "require-dev": {
-        "orchestra/testbench": "^7.0",
-        "pestphp/pest": "^1.21"
+        "larastan/larastan": "^3.0",
+        "orchestra/testbench": "^10.0 || ^11.0",
+        "phpunit/phpunit": "^11.5 || ^12.0"
     },
     "autoload": {
         "psr-4": {
-            "JasiriLabs\\Selcom\\": "src"
+            "SelcomDevelopers\\LaravelSelcom\\": "src/"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "JasiriLabs\\Selcom\\Tests\\": "tests"
-        }
-    },
-    "scripts": {
-        "test": "vendor/bin/pest",
-        "test-coverage": "vendor/bin/pest --coverage-html coverage"
-
-    },
-    "config": {
-        "sort-packages": true,
-        "allow-plugins": {
-            "pestphp/pest-plugin": true
+            "SelcomDevelopers\\LaravelSelcom\\Tests\\": "tests/"
         }
     },
     "extra": {
         "laravel": {
             "providers": [
-                "JasiriLabs\\Selcom\\SelcomServiceProvider"
+                "SelcomDevelopers\\LaravelSelcom\\SelcomServiceProvider"
             ],
             "aliases": {
-                "Selcom": "JasiriLabs\\Selcom\\Facades\\Selcom"
+                "Selcom": "SelcomDevelopers\\LaravelSelcom\\Facades\\Selcom"
             }
         }
-    }
+    },
+    "scripts": {
+        "test": "phpunit",
+        "analyse": "phpstan analyse --memory-limit=1G",
+        "check": [
+            "@composer validate",
+            "@analyse",
+            "@test"
+        ]
+    },
+    "config": {
+        "sort-packages": true,
+        "optimize-autoloader": false,
+        "classmap-authoritative": false,
+        "allow-plugins": {
+            "php-http/discovery": true
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
 }
