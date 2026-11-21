@@ -1,55 +1,35 @@
 # Contributing
 
-Contributions are **welcome** and will be fully **credited**.
+Thanks for helping. This is a community Laravel package for the Selcom API gateway, and it is **not affiliated with Selcom Paytech Ltd.**
 
-Please read and understand the contribution guide before creating an issue or pull request.
+## Ground rules
 
-## Etiquette
+- **The spec is the source of truth.** Signing, result codes, retries and webhooks are defined in [selcom-spec](https://github.com/selcom-developers/selcom-spec), and implemented by [selcom-php](https://github.com/selcom-developers/selcom-php). This package is the Laravel layer on top: keep its coupling to selcom-php's public API.
+- **Clean room.** Write your own code. Do not copy from Selcom's official clients or from other Selcom libraries. Reading them to understand behaviour is fine.
+- **No secrets and no real data.** Tests use made-up values only: phones `2557000000xx`, IDs like `ORD-1001` and `TXN-...`, keys like `test-key-0001`, or the sample values printed in Selcom's public documentation.
+- **No automatic retry of payments or writes.** This is a hard rule. Reconciliation is query only.
 
-This project is open source, and as such, the maintainers give their free time to build and maintain the source code
-held within. They make the code freely available in the hope that it will be of use to other developers. It would be
-extremely unfair for them to suffer abuse or anger for their hard work.
+## Development
 
-Please be considerate towards maintainers when raising issues or presenting pull requests. Let's show the
-world that developers are civilized and selfless people.
+Requires PHP 8.2 or later (8.3 for Laravel 13) and Composer.
 
-It's the duty of the maintainer to ensure that all submissions to the project are of sufficient
-quality to benefit the project. Many developers have different skillsets, strengths, and weaknesses. Respect the maintainer's decision, and do not be upset or abusive if your submission is not used.
+```
+composer install
+composer check       # validate, Larastan (level 8), PHPUnit
+```
 
-## Viability
+CI runs Laravel 12 on PHP 8.2 to 8.5 and Laravel 13 on PHP 8.3 to 8.5. To try one line locally, pin it as the workflow does (`composer require --no-update illuminate/*:13.* ...` and `orchestra/testbench:11.*`).
 
-When requesting or submitting new features, first consider whether it might be useful to others. Open
-source projects are used by many developers, who may have entirely different needs to your own. Think about
-whether or not your feature is likely to be used by other users of the project.
+## Spec vectors
 
-## Procedure
+The tests and the `Selcom::fake()` presets use the copy in `resources/vectors`. To move to another spec tag:
 
-Before filing an issue:
+```
+scripts/refresh-spec.sh v0.2.0
+```
 
-- Attempt to replicate the problem, to ensure that it wasn't a coincidental incident.
-- Check to make sure your feature suggestion isn't already present within the project.
-- Check the pull requests tab to ensure that the bug doesn't have a fix in progress.
-- Check the pull requests tab to ensure that the feature isn't already in progress.
+This rewrites `resources/vectors` and `SPEC_VERSION`. Never edit the vectors by hand; CI checks they match the spec at that tag.
 
-Before submitting a pull request:
+## Pull requests
 
-- Check the codebase to ensure that your feature doesn't already exist.
-- Check the pull requests to ensure that another person hasn't already submitted the feature or fix.
-
-## Requirements
-
-If the project maintainer has any additional requirements, you will find them listed here.
-
-- **[PSR-2 Coding Standard](https://github.com/php-fig/fig-standards/blob/master/accepted/PSR-2-coding-style-guide.md)** - The easiest way to apply the conventions is to install [PHP Code Sniffer](https://pear.php.net/package/PHP_CodeSniffer).
-
-- **Add tests!** - Your patch won't be accepted if it doesn't have tests.
-
-- **Document any change in behaviour** - Make sure the `README.md` and any other relevant documentation are kept up-to-date.
-
-- **Consider our release cycle** - We try to follow [SemVer v2.0.0](https://semver.org/). Randomly breaking public APIs is not an option.
-
-- **One pull request per feature** - If you want to do more than one thing, send multiple pull requests.
-
-- **Send coherent history** - Make sure each individual commit in your pull request is meaningful. If you had to make multiple intermediate commits while developing, please [squash them](https://www.git-scm.com/book/en/v2/Git-Tools-Rewriting-History#Changing-Multiple-Commit-Messages) before submitting.
-
-**Happy coding**!
+Branch from `main`, keep a pull request to one concern, add tests, and describe what changed and why. Update `CHANGELOG.md` under Unreleased.

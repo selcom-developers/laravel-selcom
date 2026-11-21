@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: PHP ${{ matrix.php }} / Laravel ${{ matrix.laravel }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { laravel: '12.*', testbench: '10.*', php: '8.2' }
+          - { laravel: '12.*', testbench: '10.*', php: '8.3' }
+          - { laravel: '12.*', testbench: '10.*', php: '8.4' }
+          - { laravel: '12.*', testbench: '10.*', php: '8.5' }
+          - { laravel: '13.*', testbench: '11.*', php: '8.3' }
+          - { laravel: '13.*', testbench: '11.*', php: '8.4' }
+          - { laravel: '13.*', testbench: '11.*', php: '8.5' }
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: json, mbstring, pdo_sqlite, sqlite3, curl
+          coverage: none
+          tools: composer:v2
+
+      - name: Vectors are byte-identical to selcom-spec at SPEC_VERSION
+        run: |
+          tag="$(head -n 1 SPEC_VERSION)"
+          git clone --quiet --depth 1 --branch "$tag" https://github.com/selcom-developers/selcom-spec.git "$RUNNER_TEMP/spec"
+          test "$(git -C "$RUNNER_TEMP/spec" rev-parse HEAD)" = "$(sed -n 2p SPEC_VERSION)"
+          diff -r "$RUNNER_TEMP/spec/vectors/responses" resources/vectors/responses
+          diff "$RUNNER_TEMP/spec/vectors/signing.json" resources/vectors/signing.json
+
+      - name: Validate composer.json
+        run: composer validate
+
+      - name: Pin the Laravel line
+        run: >
+          composer require --no-update --no-interaction "laravel/framework:${{ matrix.laravel }}" &&
+          composer require --dev --no-update --no-interaction "orchestra/testbench:${{ matrix.testbench }}"
+
+      - name: Install dependencies
+        run: composer update --no-interaction --no-progress --prefer-dist
+
+      - name: Static analysis (Larastan)
+        run: composer analyse
+
+      - name: Tests (spec vectors and unit tests; no network)
+        run: composer test
+
+      - name: Build (the package archive)
+        run: composer archive --format=zip --dir=build
