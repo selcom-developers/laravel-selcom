@@ -71,12 +71,22 @@ return [
     'webhook' => [
         'enabled' => (bool) env('SELCOM_WEBHOOK_ENABLED', false),
 
-        // Put an unguessable token in the path, for example "selcom/webhook/7f3c9a...".
-        'path' => env('SELCOM_WEBHOOK_PATH', 'selcom/webhook'),
+        // REQUIRED when enabled, and it must carry an unguessable token, for example
+        // "selcom/webhook/7f3c9a...". The bare "selcom/webhook" is refused: the route is not registered.
+        'path' => env('SELCOM_WEBHOOK_PATH'),
         'route_name' => 'selcom.webhook',
         // Keep CSRF-protected groups ("web") out of this list: the gateway sends no CSRF token.
-        // Add throttling here if you want it.
-        'middleware' => [],
+        // The default throttles by client IP; the limit is "rate_limit" requests a minute.
+        'middleware' => [\Illuminate\Routing\Middleware\ThrottleRequests::class . ':selcom-webhook'],
+        'rate_limit' => (int) env('SELCOM_WEBHOOK_RATE_LIMIT', 120),
+
+        // Bodies larger than this are refused with 413 before anything parses or logs them.
+        'max_body_bytes' => (int) env('SELCOM_WEBHOOK_MAX_BODY', 65536),
+
+        // true: a delivery with no Digest header (UNSIGNED) is refused with 401 and not processed.
+        // The spec accepts UNSIGNED (order-status confirmation is then the only protection), so the
+        // default is false; turn this on once you have confirmed that your deliveries are signed.
+        'refuse_unsigned' => (bool) env('SELCOM_WEBHOOK_REFUSE_UNSIGNED', false),
 
         // The secret that signs deliveries. Null: the checkout secret, else the API secret.
         // (Which key Selcom signs webhooks with is an open question in the spec.)
@@ -102,6 +112,11 @@ return [
         // After storing, queue a job that calls checkout.order-status for the order and fires
         // OrderStatusConfirmed. Use a real queue connection: the sync driver runs it in the request.
         'confirm' => (bool) env('SELCOM_WEBHOOK_CONFIRM', false),
+        // While the order is PENDING or AMBIGUOUS the job asks again every "confirm_interval_seconds"
+        // (the spec's 3 minutes) for at most "confirm_window_minutes"; after that selcom:reconcile
+        // takes over.
+        'confirm_interval_seconds' => (int) env('SELCOM_WEBHOOK_CONFIRM_INTERVAL', 180),
+        'confirm_window_minutes' => (int) env('SELCOM_WEBHOOK_CONFIRM_WINDOW', 30),
         'queue' => [
             'connection' => env('SELCOM_WEBHOOK_QUEUE_CONNECTION'),
             'name' => env('SELCOM_WEBHOOK_QUEUE'),
@@ -135,5 +150,11 @@ return [
     'reconcile' => [
         'older_than_minutes' => 3,
         'limit' => 100,
+        // Orders the gateway does not know are polled for this long (from creation), then flagged
+        // `needs_review` and left alone.
+        'not_found_max_age_minutes' => 60,
+        // A payout still "submitting" may have a request in flight: it is not queried until the
+        // payment timeout (connect + read) plus this margin has passed.
+        'submitting_margin_seconds' => 30,
     ],
 ];

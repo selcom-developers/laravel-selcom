@@ -16,6 +16,7 @@ use SelcomDevelopers\LaravelSelcom\Models\SelcomWebhookDelivery;
 use SelcomDevelopers\LaravelSelcom\Tests\Support\FixedClock;
 use SelcomDevelopers\LaravelSelcom\Tests\Support\Vectors;
 use SelcomDevelopers\LaravelSelcom\Tests\TestCase;
+use SelcomDevelopers\LaravelSelcom\Webhook\StoreOutcome;
 use SelcomDevelopers\LaravelSelcom\Webhook\WebhookStore;
 use SelcomDevelopers\Selcom\Operation;
 use SelcomDevelopers\Selcom\Webhook\WebhookPayload;
@@ -115,7 +116,7 @@ final class WebhookControllerTest extends TestCase
         $store = $this->app?->make(WebhookStore::class);
         self::assertNotNull($store);
         $payload = WebhookPayload::fromRawBody('{"order_id":"ORD-2001","transid":"TXN-WLT-2001","amount":"x"}');
-        self::assertFalse($store->store($payload, WebhookVerdict::Unsigned, [], '{}'));
+        self::assertSame(StoreOutcome::Duplicate, $store->store($payload, WebhookVerdict::Unsigned, [], '{}'));
         self::assertSame(1, SelcomWebhookDelivery::query()->count());
     }
 
@@ -156,7 +157,7 @@ final class WebhookControllerTest extends TestCase
     public function testAFailedStoreAnswers500SoTheGatewayRetries(): void
     {
         $this->app?->instance(WebhookStore::class, new class implements WebhookStore {
-            public function store(WebhookPayload $payload, WebhookVerdict $verdict, array $redactedHeaders, string $redactedBody): bool
+            public function store(WebhookPayload $payload, WebhookVerdict $verdict, array $redactedHeaders, string $redactedBody): StoreOutcome
             {
                 throw new \RuntimeException('disk full');
             }
@@ -200,7 +201,7 @@ final class WebhookControllerTest extends TestCase
 
     public function testTheConfirmationJobQueriesOrderStatusAndAppliesItThroughTheGuard(): void
     {
-        SelcomOrder::query()->create(['order_id' => 'ORD-2001', 'amount' => 10000, 'currency' => 'TZS']);
+        SelcomOrder::query()->create(['order_id' => 'ORD-2001', 'amount' => 5000, 'currency' => 'TZS']);
         $fake = Selcom::fake(['checkout.order-status' => 'completed']);
         Event::fake([OrderStatusConfirmed::class]);
 

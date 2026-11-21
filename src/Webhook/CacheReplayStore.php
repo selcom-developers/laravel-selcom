@@ -21,7 +21,7 @@ use SelcomDevelopers\Selcom\Webhook\ReplayStore;
  * If the cache itself fails, a ReplayStoreException is thrown (not a verdict): the webhook
  * controller answers 5xx so the gateway delivers again.
  */
-final class CacheReplayStore implements ReplayStore
+final class CacheReplayStore implements ReplayStore, ForgetsDigests
 {
     private readonly ClockInterface $clock;
 
@@ -31,6 +31,15 @@ final class CacheReplayStore implements ReplayStore
         ?ClockInterface $clock = null,
     ) {
         $this->clock = $clock ?? new SystemClock();
+    }
+
+    public function forget(string $digest): void
+    {
+        try {
+            $this->cache->forget($this->prefix . hash('sha256', $digest));
+        } catch (\Throwable $e) {
+            report($e);
+        }
     }
 
     public function seen(string $digest, int $keepUntil): bool

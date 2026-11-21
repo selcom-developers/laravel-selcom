@@ -14,9 +14,10 @@ use SelcomDevelopers\Selcom\Webhook\WebhookVerdict;
 interface WebhookStore
 {
     /**
-     * Store the delivery. Return false when it is a duplicate of one already stored (same
-     * order_id and transid): the controller then acknowledges it and processes nothing.
-     * Throw when storing failed: the controller answers 500 so the gateway tries again.
+     * Store the delivery. A duplicate of one already stored (same order_id and transid) is
+     * Duplicate, unless this delivery's verdict is stronger than the stored one (VALID over
+     * UNSIGNED): then the row is upgraded and the outcome is Upgraded, so confirmation is queued
+     * again. Throw when storing failed: the controller answers 500 so the gateway tries again.
      *
      * @param array<string, mixed> $redactedHeaders Authorization and Digest already masked
      * @param string $redactedBody personal data already masked
@@ -26,5 +27,5 @@ interface WebhookStore
         WebhookVerdict $verdict,
         array $redactedHeaders,
         string $redactedBody,
-    ): bool;
+    ): StoreOutcome;
 }

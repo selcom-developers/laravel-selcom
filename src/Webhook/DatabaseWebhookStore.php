@@ -12,7 +12,9 @@ use SelcomDevelopers\Selcom\Webhook\WebhookVerdict;
 /**
  * Stores each delivery in the selcom_webhook_deliveries table (publish the migrations first).
  * The unique `dedupe_key` ("order_id|transid") is the durable guard: a second delivery of the same
- * payment attempt hits the index and is reported as a duplicate.
+ * payment attempt hits the index. If the second one carries a stronger verdict than the stored
+ * row (a VALID delivery after an UNSIGNED one), the row is upgraded to it, so the first delivery
+ * to arrive never decides the verdict.
  */
 final class DatabaseWebhookStore implements WebhookStore
 {
@@ -23,23 +25,37 @@ final class DatabaseWebhookStore implements WebhookStore
     {
     }
 
-    public function store(WebhookPayload $payload, WebhookVerdict $verdict, array $redactedHeaders, string $redactedBody): bool
+    public function store(WebhookPayload $payload, WebhookVerdict $verdict, array $redactedHeaders, string $redactedBody): StoreOutcome
     {
+        $attributes = [
+            'verdict' => $verdict->value,
+            'payment_status' => $payload->paymentStatus,
+            'body' => $redactedBody,
+            'headers' => $redactedHeaders,
+            'received_at' => now(),
+        ];
+
         try {
             $this->model::query()->create([
                 'dedupe_key' => $payload->dedupeKey(),
                 'order_id' => $payload->orderId,
                 'transid' => $payload->transid,
-                'verdict' => $verdict->value,
-                'payment_status' => $payload->paymentStatus,
-                'body' => $redactedBody,
-                'headers' => $redactedHeaders,
-                'received_at' => now(),
-            ]);
-        } catch (UniqueConstraintViolationException) {
-            return false;
+            ] + $attributes);
+        } catch (UniqueConstraintViolationException $e) {
+            $key = $payload->dedupeKey();
+            $existing = $key === null ? null : $this->model::query()->where('dedupe_key', $key)->first();
+            if ($existing === null) {
+                throw $e;
+            }
+            $stored = WebhookVerdict::tryFrom($existing->verdict);
+            if ($stored !== null && StoreOutcome::strength($verdict) <= StoreOutcome::strength($stored)) {
+                return StoreOutcome::Duplicate;
+            }
+            $existing->forceFill($attributes + ['processed_at' => null])->save();
+
+            return StoreOutcome::Upgraded;
         }
 
-        return true;
+        return StoreOutcome::Stored;
     }
 }

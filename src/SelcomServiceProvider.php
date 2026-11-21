@@ -7,6 +7,9 @@ namespace SelcomDevelopers\LaravelSelcom;
 use Illuminate\Contracts\Cache\Factory as CacheFactory;
 use Illuminate\Contracts\Config\Repository as ConfigRepository;
 use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 use Psr\Clock\ClockInterface;
@@ -174,9 +177,15 @@ final class SelcomServiceProvider extends ServiceProvider
         $path = $config->get('selcom.webhook.path');
         $middleware = $config->get('selcom.webhook.middleware', []);
         $name = $config->get('selcom.webhook.route_name', 'selcom.webhook');
-        if (!is_string($path) || trim($path, '/') === '') {
-            throw new ConfigurationException('"selcom.webhook.path" must not be empty when the webhook is enabled.');
+        if (!is_string($path) || trim($path, '/') === '' || trim($path, '/') === 'selcom/webhook') {
+            throw new ConfigurationException(
+                'The webhook is enabled but "selcom.webhook.path" (SELCOM_WEBHOOK_PATH) is empty or the bare default. '
+                . 'Set a path with an unguessable token, for example "selcom/webhook/<random>". The route was not registered.',
+            );
         }
+
+        $limit = $config->get('selcom.webhook.rate_limit', 120);
+        RateLimiter::for('selcom-webhook', static fn (Request $request): Limit => Limit::perMinute(is_int($limit) && $limit > 0 ? $limit : 120)->by((string) $request->ip()));
 
         // The gateway sends no CSRF token and no session, so the route is registered outside the
         // "web" group; whatever you list in `selcom.webhook.middleware` is all that runs.
