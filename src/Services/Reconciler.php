@@ -32,6 +32,7 @@ final class Reconciler
         private readonly FinalStateGuard $guard,
         private readonly Dispatcher $events,
         private readonly ConfigRepository $config,
+        private readonly \SelcomDevelopers\Selcom\Config $selcom,
     ) {
     }
 
@@ -41,8 +42,11 @@ final class Reconciler
     public function reconcileOrders(int $olderThanMinutes, int $limit, bool $dryRun = false): array
     {
         $class = $this->modelClass('order', SelcomOrder::class);
+        if (!$dryRun) {
+            $this->handOverAbandonedOrders($class);
+        }
         $rows = [];
-        foreach ($this->due($class, SelcomOrder::RECONCILABLE_STATES, $olderThanMinutes, $limit) as $order) {
+        foreach ($this->due($class, SelcomOrder::RECONCILABLE_STATES, $olderThanMinutes, $limit, false) as $order) {
             \assert($order instanceof SelcomOrder);
             $rows[] = $this->one('order', $order->order_id, $dryRun, function () use ($order): array {
                 $result = $this->client->orderStatus(new OrderStatusRequest($order->order_id));
@@ -61,7 +65,7 @@ final class Reconciler
     {
         $class = $this->modelClass('payout', SelcomPayout::class);
         $rows = [];
-        foreach ($this->due($class, SelcomPayout::RECONCILABLE_STATES, $olderThanMinutes, $limit) as $payout) {
+        foreach ($this->due($class, SelcomPayout::RECONCILABLE_STATES, $olderThanMinutes, $limit, true) as $payout) {
             \assert($payout instanceof SelcomPayout);
             $rows[] = $this->one($payout->kind, $payout->transid, $dryRun, function () use ($payout): array {
                 $result = $payout->kind === SelcomPayout::CASHIN
@@ -115,14 +119,56 @@ final class Reconciler
      *
      * @return iterable<int, T>
      */
-    private function due(string $class, array $states, int $olderThanMinutes, int $limit): iterable
+    private function due(string $class, array $states, int $olderThanMinutes, int $limit, bool $payouts): iterable
     {
-        return $class::query()
+        $quietSince = now()->subMinutes($olderThanMinutes);
+        $query = $class::query()
             ->whereIn('state', $states)
-            ->where('updated_at', '<=', now()->subMinutes($olderThanMinutes))
-            ->orderBy('updated_at')
-            ->limit($limit)
-            ->get();
+            // A record flagged for review has been handed to a person: it is not polled again.
+            ->where('needs_review', false)
+            ->where('updated_at', '<=', $quietSince);
+
+        if ($payouts) {
+            // A payout still being submitted may have a request in flight: give it the whole payment
+            // timeout (connect + read) plus a margin before asking about it.
+            $query->where(function ($q) use ($quietSince): void {
+                $q->where('state', '!=', SelcomPayout::SUBMITTING)
+                    ->orWhere('updated_at', '<=', min($quietSince, $this->submittingCutoff()));
+            });
+        }
+
+        return $query->orderBy('updated_at')->limit($limit)->get();
+    }
+
+    private function submittingCutoff(): \Illuminate\Support\Carbon
+    {
+        $payment = $this->selcom->timeouts->payment;
+        $margin = $this->config->get('selcom.reconcile.submitting_margin_seconds', 30);
+        $seconds = (int) ceil($payment->connectSeconds + $payment->readSeconds) + (is_int($margin) && $margin >= 0 ? $margin : 30);
+
+        return now()->subSeconds($seconds);
+    }
+
+    /**
+     * Orders the gateway has never heard of are polled for a bounded time. After
+     * `selcom.reconcile.not_found_max_age_minutes` they are flagged for a person and no longer
+     * polled, so abandoned rows cannot crowd out real ones.
+     *
+     * @param class-string<SelcomOrder> $class
+     */
+    private function handOverAbandonedOrders(string $class): void
+    {
+        $minutes = $this->config->get('selcom.reconcile.not_found_max_age_minutes', 60);
+        $minutes = is_int($minutes) && $minutes > 0 ? $minutes : 60;
+
+        $class::query()
+            ->where('state', SelcomOrder::NOT_FOUND)
+            ->where('needs_review', false)
+            ->where('created_at', '<=', now()->subMinutes($minutes))
+            ->update([
+                'needs_review' => true,
+                'review_reason' => 'The gateway had no record of this order for ' . $minutes . ' minutes. Check whether it was ever created.',
+            ]);
     }
 
     /**

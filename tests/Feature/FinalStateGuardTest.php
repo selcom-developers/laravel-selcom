@@ -44,7 +44,7 @@ final class FinalStateGuardTest extends TestCase
 
     private function newOrder(): SelcomOrder
     {
-        return SelcomOrder::query()->create(['order_id' => 'ORD-1001', 'amount' => 8000, 'currency' => 'TZS']);
+        return SelcomOrder::query()->create(['order_id' => 'ORD-1001', 'amount' => 5000, 'currency' => 'TZS']);
     }
 
     private function newPayout(string $state = SelcomPayout::PENDING): SelcomPayout
@@ -145,8 +145,11 @@ final class FinalStateGuardTest extends TestCase
         self::assertSame(FinalStateGuard::FLAGGED, $outcome);
         self::assertSame('pending', $query->state);
         self::assertTrue($query->needs_review);
+    }
 
-        $direct = SelcomPayout::query()->create(['transid' => 'TXN-UTL-0002', 'kind' => 'utility', 'state' => SelcomPayout::SUBMITTING]);
+    public function testAPayoutIsFailedFromTheDirectAnswer(): void
+    {
+        $direct = $this->newPayout(SelcomPayout::SUBMITTING);
         $outcome = $this->guard->applyPayoutResult($direct, $this->payout(Operation::UtilityPaymentProcess, 'failure'), FinalStateGuard::SOURCE_SUBMIT);
         self::assertSame(FinalStateGuard::APPLIED, $outcome);
         self::assertSame('failed', $direct->state);

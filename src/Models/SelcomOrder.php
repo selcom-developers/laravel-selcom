@@ -39,7 +39,7 @@ class SelcomOrder extends Model
     public const FINAL_STATES = [self::SUCCESS, self::FAILED];
 
     /** States that selcom:reconcile queries. */
-    public const RECONCILABLE_STATES = [self::PENDING];
+    public const RECONCILABLE_STATES = [self::PENDING, self::NOT_FOUND];
 
     protected $guarded = ['id'];
 
