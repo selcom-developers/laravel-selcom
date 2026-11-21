@@ -14,6 +14,8 @@ use SelcomDevelopers\Selcom\Result\Result;
  */
 final class RecordReconciled
 {
+    use SerializesRedacted;
+
     public function __construct(
         public readonly Model $record,
         public readonly Result $result,

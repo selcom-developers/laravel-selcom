@@ -144,12 +144,12 @@ and send the URL on every order as `webhookUrl` (the request classes base64-enco
 
 What the controller does, in order (the spec's handling steps):
 
-1. Reads the raw body before anything parses it, and verifies it with selcom-php's `WebhookVerifier`. If the replay store itself fails (a cache outage), it answers **500** so the gateway delivers again.
-2. Fires `WebhookReceived`, then the verdict event.
-3. `INVALID` and `STALE` answer **401** and stop. `REPLAY` answers 200 and stops. `VALID` and `UNSIGNED` continue.
-4. Stores the delivery (redacted) through the `WebhookStore`. A duplicate of an already stored `(order_id, transid)` is acknowledged and stops.
-5. Acknowledges with **200**. If storing fails it answers **500** so the gateway tries again, and nothing else.
-6. If `SELCOM_WEBHOOK_CONFIRM=true`, queues `ConfirmOrderStatus`, which calls `checkout.order-status` and fires `OrderStatusConfirmed`. A queue problem is reported but never changes the acknowledgement.
+1. Refuses a body above `max_body_bytes` with **413**, then reads the raw body before anything parses it and verifies it with selcom-php's `WebhookVerifier`. If the replay store itself fails (a cache outage), it answers **500** so the gateway delivers again.
+2. `INVALID` and `STALE` answer **401** and stop. `REPLAY` answers 200 and stops. `VALID` and `UNSIGNED` continue (with `refuse_unsigned` on, `UNSIGNED` answers 401 and stops).
+3. Stores the delivery (redacted) through the `WebhookStore`. A repeat of an already stored `(order_id, transid)` is acknowledged and stops, unless it carries a **stronger verdict** (`VALID` over `UNSIGNED`): then the stored row is upgraded and confirmation is queued again.
+4. Acknowledges with **200**. If storing fails it answers **500** so the gateway tries again, and the replay digest is forgotten first, so the identical redelivery is processed and not treated as already handled.
+5. Fires `WebhookReceived` and the verdict event after the delivery is stored. A listener that throws is reported and ignored: it can never turn a stored delivery into a 5xx.
+6. If `SELCOM_WEBHOOK_CONFIRM=true`, queues `ConfirmOrderStatus`. It calls `checkout.order-status`, applies the answer through the final-state guard, fires `OrderStatusConfirmed`, and while the order is `PENDING` or `AMBIGUOUS` asks again every 3 minutes for 30 minutes (then `selcom:reconcile` takes over). A queue problem is reported but never changes the acknowledgement.
 
 Unknown or unparseable fields in an unsigned body (an odd `amount`, say) never make the handler fail: the amount is simply absent from the payload. A body that is not a JSON object is answered with 400 and not stored.
 
@@ -160,7 +160,11 @@ Unknown or unparseable fields in an unsigned body (an odd `amount`, say) never m
 | `selcom.webhook.mode` | `enforce` (default) or `report_only`: log and process with the verdict but never answer 401. Use `report_only` only to find out which key signs deliveries. |
 | `selcom.webhook.cache_store` | Cache store behind the replay guard. Use a shared store (redis, database, memcached, file): `array` forgets per process, and PHP-FPM is a new process per request. |
 | `selcom.webhook.store` | `none` (default) or `database` (needs the migrations). The unique `(order_id, transid)` key is the durable guard. |
-| `selcom.webhook.confirm` | Queue the order-status confirmation. Use a real queue connection: the `sync` driver runs it inside the request. |
+| `selcom.webhook.confirm` | Queue the order-status confirmation. Use a real queue connection: the `sync` driver runs it inside the request. `confirm_interval_seconds` (180) and `confirm_window_minutes` (30) bound the re-checks. |
+| `selcom.webhook.path` | **Required**, with an unguessable token in it. The route is not registered (a `ConfigurationException` is thrown) when it is empty or the bare `selcom/webhook`. |
+| `selcom.webhook.middleware`, `rate_limit` | Default: a throttle by client IP, `rate_limit` requests a minute (120). Add your own middleware, but keep the `web` group out: the gateway sends no CSRF token. |
+| `selcom.webhook.max_body_bytes` | Bodies above this (default 65536) are refused with 413 before anything parses or logs them. |
+| `selcom.webhook.refuse_unsigned` | Answer 401 to deliveries with no `Digest` header. Default off (the spec accepts them, and `order-status` confirmation is then the only protection); turn it on once you have seen that your deliveries are signed. |
 
 The replay guard is one atomic cache `add` per digest. It keeps each digest until max(now, signed time) + window, the time the verifier hands it.
 
@@ -172,17 +176,26 @@ All in `SelcomDevelopers\LaravelSelcom\Events`:
 |---|---|
 | `WebhookReceived` | Every delivery that reaches the route, whatever the verdict |
 | `WebhookValid`, `WebhookUnsigned`, `WebhookInvalid`, `WebhookStale`, `WebhookReplay` | One per verdict, fired after `WebhookReceived` |
-| `OrderStatusConfirmed` | The queued confirmation got the order's status from the gateway. **Act on this, not on the webhook.** |
+| `OrderStatusConfirmed` | One check by the queued confirmation: carries the result and the guard's `outcome`. It can fire several times for one order. **Informational: do not fulfil on it.** |
+| `OrderSucceeded`, `PayoutSucceeded` | The guard moved a record to `success`. Fired **exactly once per record**, at the transition: success is final, so a re-check, a redelivery or a job retry fires nothing. **Fulfil on `OrderSucceeded`.** |
 | `ConflictingResultFlagged` | A result contradicted a final state; the state was kept and the record flagged `needs_review` |
 | `RecordReconciled` | `selcom:reconcile` queried a record and applied the answer |
+
+Listeners must key on the transition: fulfil from `OrderSucceeded` (and keep your fulfilment idempotent on the order). Without the orders table there is no guard and no transition event; then do your own compare-and-set on your order in the `OrderStatusConfirmed` listener.
+
+Events can be queued or broadcast, so what they serialise is redacted: results and webhook payloads are replaced by copies with personal data masked and raw bodies redacted. The live event in the running process keeps the originals.
 
 Webhook events carry `verdict`, `payload` (a `WebhookPayload`: `orderId`, `transid`, `paymentStatus`, `amountTzs`, ...), and redacted `headers` and `redactedBody` that are safe to log. The payload holds personal data as received.
 
 ```php
 Event::listen(OrderStatusConfirmed::class, function (OrderStatusConfirmed $e) {
     if ($e->result->status === Status::Success) {
-        // check $e->result->order()?->amount against YOUR order, then fulfil, idempotently
+        // information only: log it, alert on `$e->outcome === 'flagged'`
     }
+});
+
+Event::listen(OrderSucceeded::class, function (OrderSucceeded $e) {
+    // once per order: fulfil here, idempotently
 });
 ```
 
@@ -207,8 +220,10 @@ Three tables (names, connection and model classes are configurable): `selcom_ord
 
 - `SUCCESS` is final. Once a record is final, nothing changes its state; a conflicting result is ignored and the record is flagged `needs_review` (and `ConflictingResultFlagged` fires).
 - `PENDING` never overwrites anything.
+- **An order succeeds only for the amount it was made for.** The guard compares the gateway's amount (and its currency, when it states one) with `selcom_orders.amount` and `currency`. On a mismatch, or a paid answer with no amount, the order stays `pending` and is flagged `needs_review`. Store the amount when you create the order; an order with no stored amount cannot be checked.
+- **A result must belong to the record.** The guard refuses (`ResultMismatchException`, nothing changes) a result of the wrong operation (a cancel answer for `applyOrderResult`, a utility result for a cash-in) or for another `order_id` or `transid`; `closeOrderAfterCancel()` needs a `checkout.cancel-order` result for that order.
 - **A poll never marks a checkout order failed.** `order-status` `FAILED` describes the latest attempt, and an unexpired order can still be paid. Cancel it, and only after a confirmed cancel call `closeOrderAfterCancel($order, $cancelResult)`.
-- A payout is marked `failed` only from the gateway's direct answer to the payment (`SOURCE_SUBMIT`). A `FAILED` from a status query is recorded and flagged for a person: Selcom does not publish the codes for rejected queries, so the spec says not to pay again on one such result.
+- A payout is marked `failed` only from the gateway's direct answer to the payment (`SOURCE_SUBMIT`), and not for a row last seen as `not_found` or `ambiguous` (that is flagged for review instead). A `FAILED` from a status query is recorded and flagged for a person: Selcom does not publish the codes for rejected queries, so the spec says not to pay again on one such result.
 
 ```php
 $guard = app(FinalStateGuard::class);
@@ -227,7 +242,7 @@ php artisan selcom:reconcile --older-than=10 --type=payouts --limit=50
 php artisan selcom:reconcile --dry-run
 ```
 
-`selcom:status` is read-only. `selcom:reconcile` is **query only**: it has no code path that sends a payment, an order, a cancel or any other write. It finds records in `pending` (orders) or `submitting`, `pending`, `ambiguous` (payouts) whose `updated_at` is older than N minutes (default 3, the spec's first-poll delay), asks the gateway with `orderStatus`, `utilityQuery` or `walletCashinQuery`, and applies the answer through the guard. A query that gets no answer leaves the record exactly as it was, and the next run asks again.
+`selcom:status` is read-only. `selcom:reconcile` is **query only**: it has no code path that sends a payment, an order, a cancel or any other write. It finds records in `pending` or `not_found` (orders) or `submitting`, `pending`, `ambiguous` (payouts) whose `updated_at` is older than N minutes (default 3, the spec's first-poll delay). Three bounds keep it honest: a `not_found` order is polled for `reconcile.not_found_max_age_minutes` (60) from creation, then flagged `needs_review` and left alone; a `submitting` payout is not queried until the payment timeout (connect + read) plus `submitting_margin_seconds` (30) has passed, since its request may still be in flight; and any record flagged `needs_review` has been handed to a person and is not polled again, asks the gateway with `orderStatus`, `utilityQuery` or `walletCashinQuery`, and applies the answer through the guard. A query that gets no answer leaves the record exactly as it was, and the next run asks again.
 
 Schedule it:
 
@@ -278,6 +293,8 @@ Selcom::assertSent(Operation::CheckoutOrderStatus, fn ($r) => $r->param('order_i
 Selcom::assertNotSent(Operation::WalletCashinProcess);
 Selcom::assertSentCount(1);
 ```
+
+The recorded requests (`$fake->sent()`) mask the PIN, secrets and card tokens in `params`, and `Authorization` and `Digest` in `headers`.
 
 Scenario presets are drawn from the spec's response vectors (`resources/vectors/responses`): use the vector's own name (`success`, `in-progress-111`, `ambiguous-999`, `failure`, `not-found-404`, `gateway-error-no-json`; for order status also `completed`, `cancelled`, `rejected`, `empty-data` and more), or the short aliases `pending`, `ambiguous`, `failed`, `not-found`, `no-verdict`. `Scenarios::notSent()` and `Scenarios::unknownOutcome()` give the two transport failures; `Scenarios::body([...])` gives a body of your own.
 

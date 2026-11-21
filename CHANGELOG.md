@@ -22,6 +22,11 @@ First release of v1.
 - Testing helpers: `Selcom::fake()` with scenario presets drawn from the spec's response vectors, transport-failure presets and assertions.
 - Tests that run every case, reject, response scenario and webhook sample of selcom-spec v0.2.1 (copy in `resources/vectors`, recorded in `SPEC_VERSION`, refreshed by `scripts/refresh-spec.sh`).
 - GitHub Actions CI over the Laravel and PHP matrix, with Larastan (level 8), tests, a package build and a check that the vectors match the spec, with actions pinned by commit SHA.
+- Webhook route behaviour: events fire after the delivery is stored (a throwing listener is reported, never a 5xx); the replay digest is forgotten when a delivery is answered with 5xx; a stronger verdict (VALID over UNSIGNED) upgrades the stored row and queues confirmation again; a per-client throttle, a body size limit, an optional refusal of unsigned deliveries, and no route unless `SELCOM_WEBHOOK_PATH` carries a token.
+- `ConfirmOrderStatus` re-checks `PENDING` and `AMBIGUOUS` orders every 3 minutes for a bounded window and applies the answer through the guard; `OrderStatusConfirmed` carries the guard's outcome; `OrderSucceeded` and `PayoutSucceeded` fire once, at the transition to success.
+- Guard checks: the paid amount and currency must match the order, a result must belong to the record (`ResultMismatchException`), and a submit `FAILED` is not finalised for a payout last seen as not found or ambiguous.
+- Reconcile bounds: `not_found` orders are polled for a bounded time and records flagged for review are skipped; `submitting` payouts wait out the payment timeout.
+- Events serialise redacted results and payloads; the fake's recorded requests mask the PIN, secrets and card tokens.
 
 ### Changed
 

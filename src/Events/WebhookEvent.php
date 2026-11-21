@@ -16,6 +16,8 @@ use SelcomDevelopers\Selcom\Webhook\WebhookVerdict;
  */
 abstract class WebhookEvent
 {
+    use SerializesRedacted;
+
     /**
      * @param array<string, mixed> $headers headers with Authorization and Digest redacted
      */

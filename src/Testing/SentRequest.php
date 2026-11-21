@@ -8,10 +8,13 @@ use SelcomDevelopers\Selcom\Operation;
 use SelcomDevelopers\Selcom\Transport\TransportRequest;
 
 /**
- * A request the fake transport received, for assertions. Secrets are masked in `headers`.
+ * A request the fake transport received, for assertions. Secrets are masked: Authorization and
+ * Digest in `headers`, and the PIN (and any secret or card token) in `params`.
  */
 final class SentRequest
 {
+    private const SECRET_PARAMS = ['pin', 'secret', 'api_secret', 'card_token'];
+
     /**
      * @param array<string, mixed> $params the decoded query string (GET, DELETE) or JSON body (POST)
      * @param array<string, mixed> $headers Authorization and Digest masked
@@ -22,7 +25,6 @@ final class SentRequest
         public readonly string $url,
         public readonly array $params,
         public readonly array $headers,
-        public readonly TransportRequest $request,
     ) {
     }
 
@@ -53,7 +55,13 @@ final class SentRequest
             parse_str((string) parse_url($request->url, PHP_URL_QUERY), $params);
         }
 
+        foreach (self::SECRET_PARAMS as $name) {
+            if (array_key_exists($name, $params)) {
+                $params[$name] = '[REDACTED]';
+            }
+        }
+
         /** @var array<string, mixed> $params */
-        return new self($operation, $request->method, $request->url, $params, $request->redactedHeaders(), $request);
+        return new self($operation, $request->method, $request->url, $params, $request->redactedHeaders());
     }
 }

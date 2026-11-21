@@ -50,7 +50,6 @@ final class FakeAndLoggingTest extends TestCase
         self::assertSame('[REDACTED]', $sent->headers['Digest']);
         self::assertSame('[REDACTED]', $sent->headers['Authorization']);
         self::assertSame('TXN-CSH-0001', $sent->param('transid'));
-        self::assertNotSame('', $sent->request->headers['Digest'] ?? '');
     }
 
     public function testTransportFailurePresetsAreClassified(): void
