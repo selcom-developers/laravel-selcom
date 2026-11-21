@@ -6,6 +6,7 @@ namespace SelcomDevelopers\LaravelSelcom\Jobs;
 
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Events\Dispatcher;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
@@ -14,6 +15,7 @@ use SelcomDevelopers\LaravelSelcom\Events\OrderStatusConfirmed;
 use SelcomDevelopers\LaravelSelcom\Models\SelcomOrder;
 use SelcomDevelopers\LaravelSelcom\Services\FinalStateGuard;
 use SelcomDevelopers\Selcom\Client;
+use SelcomDevelopers\Selcom\Exception\TransportException;
 use SelcomDevelopers\Selcom\Request\OrderStatusRequest;
 use SelcomDevelopers\Selcom\Status;
 
@@ -29,7 +31,7 @@ use SelcomDevelopers\Selcom\Status;
  *
  * It never fulfils anything and never marks an order failed. Fulfil on OrderSucceeded.
  */
-final class ConfirmOrderStatus implements ShouldQueue
+final class ConfirmOrderStatus implements ShouldBeUnique, ShouldQueue
 {
     use Dispatchable;
     use InteractsWithQueue;
@@ -37,6 +39,30 @@ final class ConfirmOrderStatus implements ShouldQueue
 
     /** Unlimited attempts, bounded by retryUntil(). */
     public int $tries = 0;
+
+    /**
+     * One confirmation per order at a time: repeated deliveries for the same order (an unsigned
+     * post is cheap to repeat) cannot fan out into parallel polls. The lock lasts at most the window.
+     */
+    public function uniqueId(): string
+    {
+        return 'selcom-confirm:' . $this->orderId;
+    }
+
+    public function uniqueFor(): int
+    {
+        $minutes = config('selcom.webhook.confirm_window_minutes', 30);
+
+        return (is_int($minutes) && $minutes > 0 ? $minutes : 30) * 60;
+    }
+
+    /** Seconds to wait before retrying after an exception (the spec's 3 minutes by default). */
+    public function backoff(): int
+    {
+        $interval = config('selcom.webhook.confirm_interval_seconds', 180);
+
+        return is_int($interval) && $interval > 0 ? $interval : 180;
+    }
 
     public function __construct(
         public readonly string $orderId,
@@ -52,6 +78,23 @@ final class ConfirmOrderStatus implements ShouldQueue
     }
 
     public function handle(Client $client, Dispatcher $events, FinalStateGuard $guard): void
+    {
+        try {
+            $this->check($client, $events, $guard);
+        } catch (TransportException $e) {
+            // No answer: asking again later is the point. The queue retries after backoff().
+            throw $e;
+        } catch (\Throwable $e) {
+            // Anything else (a result for another record, a configuration problem, a bug) will not
+            // fix itself by running again.
+            if ($this->job === null) {
+                throw $e;
+            }
+            $this->fail($e);
+        }
+    }
+
+    private function check(Client $client, Dispatcher $events, FinalStateGuard $guard): void
     {
         $result = $client->orderStatus(new OrderStatusRequest($this->orderId));
 
@@ -70,8 +113,7 @@ final class ConfirmOrderStatus implements ShouldQueue
         $events->dispatch(new OrderStatusConfirmed($this->orderId, $result, $outcome));
 
         if (($result->status === Status::Pending || $result->status === Status::Ambiguous) && $this->job !== null) {
-            $interval = config('selcom.webhook.confirm_interval_seconds', 180);
-            $this->release(is_int($interval) && $interval > 0 ? $interval : 180);
+            $this->release($this->backoff());
         }
     }
 }

@@ -96,6 +96,12 @@ final class Reconciler
             // No answer (or an answer without a verdict): leave the record exactly as it is, so the next
             // run asks again. Never "fail" a record because a query failed.
             return ['type' => $type, 'id' => $id, 'status' => null, 'outcome' => 'error', 'error' => $e::class . ': ' . $e->getMessage()];
+        } catch (\Throwable $e) {
+            // The answer was applied, but a listener (or anything after it) threw. One record's
+            // failure must not stop the run: report it and carry on with the next.
+            report($e);
+
+            return ['type' => $type, 'id' => $id, 'status' => null, 'outcome' => 'error', 'error' => $e::class . ': ' . $e->getMessage()];
         }
 
         return ['type' => $type, 'id' => $id, 'status' => $result->status->value, 'outcome' => $outcome, 'error' => null];
@@ -150,24 +156,35 @@ final class Reconciler
     }
 
     /**
-     * Orders the gateway has never heard of are polled for a bounded time. After
-     * `selcom.reconcile.not_found_max_age_minutes` they are flagged for a person and no longer
-     * polled, so abandoned rows cannot crowd out real ones.
+     * Orders are polled for a bounded time: not-found ones for `reconcile.not_found_max_age_minutes`,
+     * pending ones for `reconcile.pending_max_age_minutes` (both from creation). After that they are
+     * flagged for a person and no longer polled, so abandoned rows cannot crowd out real ones.
      *
      * @param class-string<SelcomOrder> $class
      */
     private function handOverAbandonedOrders(string $class): void
     {
-        $minutes = $this->config->get('selcom.reconcile.not_found_max_age_minutes', 60);
-        $minutes = is_int($minutes) && $minutes > 0 ? $minutes : 60;
+        $this->handOver($class, SelcomOrder::NOT_FOUND, 'not_found_max_age_minutes', 60,
+            'The gateway had no record of this order for %d minutes. Check whether it was ever created.');
+        $this->handOver($class, SelcomOrder::PENDING, 'pending_max_age_minutes', 2880,
+            'This order was still unpaid after %d minutes. Check it, then close it (cancel it first) or leave it.');
+    }
+
+    /**
+     * @param class-string<SelcomOrder> $class
+     */
+    private function handOver(string $class, string $state, string $setting, int $default, string $reason): void
+    {
+        $minutes = $this->config->get('selcom.reconcile.' . $setting, $default);
+        $minutes = is_int($minutes) && $minutes > 0 ? $minutes : $default;
 
         $class::query()
-            ->where('state', SelcomOrder::NOT_FOUND)
+            ->where('state', $state)
             ->where('needs_review', false)
             ->where('created_at', '<=', now()->subMinutes($minutes))
             ->update([
                 'needs_review' => true,
-                'review_reason' => 'The gateway had no record of this order for ' . $minutes . ' minutes. Check whether it was ever created.',
+                'review_reason' => sprintf($reason, $minutes),
             ]);
     }
 
