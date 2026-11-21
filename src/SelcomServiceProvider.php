@@ -126,6 +126,7 @@ final class SelcomServiceProvider extends ServiceProvider
             return new CacheReplayStore(
                 $app->make(CacheFactory::class)->store(is_string($store) && $store !== '' ? $store : null),
                 is_string($prefix) ? $prefix : 'selcom:webhook:',
+                $app->make(ClockInterface::class),
             );
         });
 

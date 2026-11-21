@@ -166,6 +166,66 @@
       "raw_body": "{\"result\":\"SUCCESS\",\"resultcode\":\"000\",\"order_id\":\"ORD-2010\",\"transid\":\"TXN-WLT-2010\",\"reference\":\"REF0000002010\",\"channel\":\"AIRTELMONEY\",\"amount\":\"10000\",\"phone\":\"255700000001\",\"payment_status\":\"COMPLETED\"}",
       "expected_verification": "INVALID",
       "expected_amount_tzs": 10000
+    },
+    {
+      "name": "signed-fields-missing-order-id",
+      "description": "Correctly signed, but Signed-Fields leaves out order_id. INVALID.",
+      "headers": {
+        "Content-Type": "application/json",
+        "Authorization": "SELCOM MjAyY2I5NjJhYzU5MDc1Yjk2NGIwNzE1MmQyMzRiNzA=",
+        "Digest-Method": "HS256",
+        "Digest": "iKI3U6Y7gX5xLUGHntHCUC2brSQRnNfLxxwzeNv/u78=",
+        "Timestamp": "2026-11-21T10:30:46+03:00",
+        "Signed-Fields": "transid,reference,result,resultcode,payment_status"
+      },
+      "raw_body": "{\"transid\":\"TXN-WLT-2101\",\"order_id\":\"ORD-2101\",\"reference\":\"REF0000002101\",\"result\":\"SUCCESS\",\"resultcode\":\"000\",\"payment_status\":\"COMPLETED\",\"channel\":\"AIRTELMONEY\",\"amount\":\"10000\",\"phone\":\"255700000001\"}",
+      "expected_verification": "INVALID",
+      "expected_amount_tzs": 10000
+    },
+    {
+      "name": "signed-fields-missing-transid",
+      "description": "Correctly signed, but Signed-Fields leaves out transid. INVALID.",
+      "headers": {
+        "Content-Type": "application/json",
+        "Authorization": "SELCOM MjAyY2I5NjJhYzU5MDc1Yjk2NGIwNzE1MmQyMzRiNzA=",
+        "Digest-Method": "HS256",
+        "Digest": "RaRn9auB8nJMMGnehk9TTnqa1lQjPESFAprOwE64yCY=",
+        "Timestamp": "2026-11-21T10:30:46+03:00",
+        "Signed-Fields": "order_id,reference,result,resultcode,payment_status"
+      },
+      "raw_body": "{\"transid\":\"TXN-WLT-2101\",\"order_id\":\"ORD-2101\",\"reference\":\"REF0000002101\",\"result\":\"SUCCESS\",\"resultcode\":\"000\",\"payment_status\":\"COMPLETED\",\"channel\":\"AIRTELMONEY\",\"amount\":\"10000\",\"phone\":\"255700000001\"}",
+      "expected_verification": "INVALID",
+      "expected_amount_tzs": 10000
+    },
+    {
+      "name": "signed-value-with-ampersand",
+      "description": "Correctly signed, but a signed value contains '&'. INVALID.",
+      "headers": {
+        "Content-Type": "application/json",
+        "Authorization": "SELCOM MjAyY2I5NjJhYzU5MDc1Yjk2NGIwNzE1MmQyMzRiNzA=",
+        "Digest-Method": "HS256",
+        "Digest": "eP6DuS1sg6x/6Dz1+UDDRFj4GuS1vYahNrCyZ8j1MQo=",
+        "Timestamp": "2026-11-21T10:30:46+03:00",
+        "Signed-Fields": "transid,order_id,reference,result,resultcode,payment_status"
+      },
+      "raw_body": "{\"transid\":\"TXN-WLT-2101&x\",\"order_id\":\"ORD-2101\",\"reference\":\"REF0000002101\",\"result\":\"SUCCESS\",\"resultcode\":\"000\",\"payment_status\":\"COMPLETED\",\"channel\":\"AIRTELMONEY\",\"amount\":\"10000\",\"phone\":\"255700000001\"}",
+      "expected_verification": "INVALID",
+      "expected_amount_tzs": 10000
+    },
+    {
+      "name": "signed-field-name-with-ampersand",
+      "description": "Correctly signed, but a signed field name contains '&'. INVALID.",
+      "headers": {
+        "Content-Type": "application/json",
+        "Authorization": "SELCOM MjAyY2I5NjJhYzU5MDc1Yjk2NGIwNzE1MmQyMzRiNzA=",
+        "Digest-Method": "HS256",
+        "Digest": "8sLwx+NeDcVWmNDtaU2r+KJTDU9v7ishJnh7NSwhCDo=",
+        "Timestamp": "2026-11-21T10:30:46+03:00",
+        "Signed-Fields": "transid,order_id,ref&x,result,resultcode,payment_status"
+      },
+      "raw_body": "{\"transid\":\"TXN-WLT-2101\",\"order_id\":\"ORD-2101\",\"ref&x\":\"REF0000002101\",\"result\":\"SUCCESS\",\"resultcode\":\"000\",\"payment_status\":\"COMPLETED\",\"channel\":\"AIRTELMONEY\",\"amount\":\"10000\",\"phone\":\"255700000001\"}",
+      "expected_verification": "INVALID",
+      "expected_amount_tzs": 10000
     }
   ]
 }

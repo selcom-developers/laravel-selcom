@@ -166,6 +166,21 @@ final class WebhookControllerTest extends TestCase
         $this->deliver('completed-signed')->assertStatus(500);
     }
 
+    public function testAFailingReplayStoreAnswers500SoTheGatewayRetries(): void
+    {
+        $this->app?->instance(\SelcomDevelopers\Selcom\Webhook\ReplayStore::class, new class implements \SelcomDevelopers\Selcom\Webhook\ReplayStore {
+            public function seen(string $digest, int $keepUntil): bool
+            {
+                throw new \SelcomDevelopers\Selcom\Exception\ReplayStoreException('down');
+            }
+        });
+        $this->app?->forgetInstance(\SelcomDevelopers\Selcom\Webhook\WebhookVerifier::class);
+        $this->withoutExceptionHandling([\SelcomDevelopers\Selcom\Exception\ReplayStoreException::class]);
+
+        $this->deliver('completed-signed')->assertStatus(500);
+        self::assertSame(0, SelcomWebhookDelivery::query()->count());
+    }
+
     public function testNothingIsQueuedUnlessConfirmationIsOn(): void
     {
         Queue::fake();

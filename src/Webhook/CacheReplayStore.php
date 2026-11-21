@@ -5,29 +5,44 @@ declare(strict_types=1);
 namespace SelcomDevelopers\LaravelSelcom\Webhook;
 
 use Illuminate\Contracts\Cache\Repository;
+use Psr\Clock\ClockInterface;
+use SelcomDevelopers\Selcom\Exception\ReplayStoreException;
+use SelcomDevelopers\Selcom\SystemClock;
 use SelcomDevelopers\Selcom\Webhook\ReplayStore;
 
 /**
  * A replay store on a Laravel cache store, so the guard holds across PHP-FPM requests and workers.
  *
  * The check is one atomic `add`: the first delivery of a digest adds the key, every later one
- * within the window finds it. Use a shared store (redis, database, memcached, file), not "array".
+ * until `$keepUntil` finds it. The verifier passes max(now, signed timestamp) + window as
+ * `$keepUntil`; the entry is kept through that second. Use a shared store (redis, database,
+ * memcached, file), not "array".
  *
- * Expiry: a digest is remembered until max(now, signed timestamp) + window. The store does not see
- * the timestamp, and the verifier accepts one up to a window either side of now, so the store keeps
- * each digest for twice the window, which always covers it.
+ * If the cache itself fails, a ReplayStoreException is thrown (not a verdict): the webhook
+ * controller answers 5xx so the gateway delivers again.
  */
 final class CacheReplayStore implements ReplayStore
 {
+    private readonly ClockInterface $clock;
+
     public function __construct(
         private readonly Repository $cache,
         private readonly string $prefix = 'selcom:webhook:',
+        ?ClockInterface $clock = null,
     ) {
+        $this->clock = $clock ?? new SystemClock();
     }
 
-    public function seen(string $digest, int $ttlSeconds): bool
+    public function seen(string $digest, int $keepUntil): bool
     {
-        // add() returns true only when the key did not exist: that is the first sighting.
-        return !$this->cache->add($this->prefix . hash('sha256', $digest), 1, $ttlSeconds * 2);
+        // Live through $keepUntil itself, so keep it one second past.
+        $ttl = max(1, $keepUntil - $this->clock->now()->getTimestamp() + 1);
+
+        try {
+            // add() returns true only when the key did not exist: that is the first sighting.
+            return !$this->cache->add($this->prefix . hash('sha256', $digest), 1, $ttl);
+        } catch (\Throwable $e) {
+            throw new ReplayStoreException('The replay store failed.', 0, $e);
+        }
     }
 }

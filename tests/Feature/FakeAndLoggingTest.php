@@ -146,6 +146,22 @@ final class FakeAndLoggingTest extends TestCase
         self::assertStringContainsString('********0002', $text, 'the wallet utilityref is masked');
     }
 
+    public function testAmountsAreWholeNumbersAndNeverTruncated(): void
+    {
+        $fake = Selcom::fake(['walletcashin.process' => 'success']);
+
+        Selcom::walletCashin(new WalletCashinRequest('TXN-CSH-0001', 'CASHIN', '255700000002', '2500'));
+        Selcom::walletCashin(new WalletCashinRequest('TXN-CSH-0002', 'CASHIN', '255700000002', 2500.0));
+        $fake->assertSentCount(2);
+
+        try {
+            new WalletCashinRequest('TXN-CSH-0003', 'CASHIN', '255700000002', 2500.5);
+            self::fail('a fractional amount must be refused');
+        } catch (\SelcomDevelopers\Selcom\Exception\ValidationException) {
+            $fake->assertSentCount(2);
+        }
+    }
+
     public function testNoLoggingWithoutAChannel(): void
     {
         $fake = Selcom::fake(['checkout.order-status' => 'completed']);

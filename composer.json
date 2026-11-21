@@ -26,7 +26,7 @@
         "illuminate/routing": "^12.0 || ^13.0",
         "illuminate/support": "^12.0 || ^13.0",
         "psr/clock": "^1.0",
-        "selcom-developers/selcom-php": "dev-feat/v1"
+        "selcom-developers/selcom-php": "^0.1"
     },
     "require-dev": {
         "larastan/larastan": "^3.0",

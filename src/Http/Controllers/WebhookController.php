@@ -17,6 +17,7 @@ use SelcomDevelopers\LaravelSelcom\Events\WebhookUnsigned;
 use SelcomDevelopers\LaravelSelcom\Events\WebhookValid;
 use SelcomDevelopers\LaravelSelcom\Jobs\ConfirmOrderStatus;
 use SelcomDevelopers\LaravelSelcom\Webhook\WebhookStore;
+use SelcomDevelopers\Selcom\Exception\ReplayStoreException;
 use SelcomDevelopers\Selcom\Exception\ValidationException;
 use SelcomDevelopers\Selcom\Redaction\Redactor;
 use SelcomDevelopers\Selcom\Webhook\WebhookPayload;
@@ -50,8 +51,13 @@ final class WebhookController
         $headers = $this->headers($request);
         try {
             $verdict = $verifier->verify($headers, $raw);
+        } catch (ReplayStoreException $e) {
+            // Our own store failed, so there is no verdict: ask the gateway to deliver again.
+            report($e);
+
+            return new Response('', 500);
         } catch (\Throwable) {
-            // Verification never decides by throwing: anything unexpected is an invalid delivery.
+            // Anything else unexpected is an invalid delivery, never an exception to the gateway.
             $verdict = WebhookVerdict::Invalid;
         }
 

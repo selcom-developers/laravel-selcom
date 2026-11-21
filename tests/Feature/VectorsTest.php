@@ -36,7 +36,7 @@ final class VectorsTest extends TestCase
     public const SIGNING_CASES = 20;
     public const SIGNING_REJECTS = 11;
     public const RESPONSE_SCENARIOS = 120;
-    public const WEBHOOK_SAMPLES = 11;
+    public const WEBHOOK_SAMPLES = 15;
 
     // ---- Signing ---------------------------------------------------------------------------
 

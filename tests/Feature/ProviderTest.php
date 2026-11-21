@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Route;
 use SelcomDevelopers\LaravelSelcom\Facades\Selcom;
 use SelcomDevelopers\LaravelSelcom\Support\ConfigFactory;
 use SelcomDevelopers\LaravelSelcom\Support\DigestSignerFactory;
+use SelcomDevelopers\LaravelSelcom\Tests\Support\FixedClock;
 use SelcomDevelopers\LaravelSelcom\Tests\Support\Requests;
 use SelcomDevelopers\LaravelSelcom\Tests\TestCase;
 use SelcomDevelopers\LaravelSelcom\Webhook\CacheReplayStore;
@@ -149,14 +150,36 @@ final class ProviderTest extends TestCase
         \SelcomDevelopers\LaravelSelcom\Models\SelcomOrder::query()->count();
     }
 
-    public function testReplayStoreRemembersADigestForTwiceTheWindow(): void
+    public function testReplayStoreKeepsADigestThroughItsKeepUntilSecond(): void
     {
-        $store = new CacheReplayStore(new \Illuminate\Cache\Repository(new \Illuminate\Cache\ArrayStore()));
+        $now = 1_800_000_000;
+        $clock = FixedClock::at('@' . $now);
+        $store = new CacheReplayStore(new \Illuminate\Cache\Repository(new \Illuminate\Cache\ArrayStore()), 'p:', $clock);
 
-        self::assertFalse($store->seen('digest-a', 300), 'first sighting');
-        $this->travel(301)->seconds();
-        self::assertTrue($store->seen('digest-a', 300), 'still remembered after one window');
-        $this->travel(300)->seconds();
-        self::assertFalse($store->seen('digest-a', 300), 'forgotten after twice the window');
+        self::assertFalse($store->seen('digest-a', $now + 300), 'first sighting');
+        $this->travel(299)->seconds();
+        self::assertTrue($store->seen('digest-a', $now + 300), 'still live inside the window');
+        self::assertFalse($store->seen('digest-b', $now + 300), 'another digest is its own sighting');
+    }
+
+    public function testReplayStoreTurnsACacheFailureIntoAReplayStoreException(): void
+    {
+        $failing = new class extends \Illuminate\Cache\Repository {
+            public function __construct()
+            {
+                parent::__construct(new \Illuminate\Cache\ArrayStore());
+            }
+
+            /**
+             * @param string $key
+             */
+            public function add($key, $value, $ttl = null): bool
+            {
+                throw new \RuntimeException('cache down');
+            }
+        };
+
+        $this->expectException(\SelcomDevelopers\Selcom\Exception\ReplayStoreException::class);
+        (new CacheReplayStore($failing))->seen('digest-a', time() + 300);
     }
 }
