@@ -72,7 +72,8 @@ return [
         'enabled' => (bool) env('SELCOM_WEBHOOK_ENABLED', false),
 
         // REQUIRED when enabled, and it must carry an unguessable token, for example
-        // "selcom/webhook/7f3c9a...". The bare "selcom/webhook" is refused: the route is not registered.
+        // "selcom/webhook/7f3c9a...". With it empty or the bare "selcom/webhook" the route is NOT
+        // registered and a warning is logged; the application keeps working.
         'path' => env('SELCOM_WEBHOOK_PATH'),
         'route_name' => 'selcom.webhook',
         // Keep CSRF-protected groups ("web") out of this list: the gateway sends no CSRF token.
@@ -150,6 +151,9 @@ return [
     'reconcile' => [
         'older_than_minutes' => 3,
         'limit' => 100,
+        // Pending orders are polled for this long (from creation), then flagged `needs_review` and
+        // left alone. Rows that stay unpaid for days should not poll forever.
+        'pending_max_age_minutes' => 2880,
         // Orders the gateway does not know are polled for this long (from creation), then flagged
         // `needs_review` and left alone.
         'not_found_max_age_minutes' => 60,

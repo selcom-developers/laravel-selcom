@@ -20,7 +20,6 @@ use SelcomDevelopers\LaravelSelcom\Tests\Support\Vectors;
 use SelcomDevelopers\LaravelSelcom\Tests\TestCase;
 use SelcomDevelopers\LaravelSelcom\Webhook\StoreOutcome;
 use SelcomDevelopers\LaravelSelcom\Webhook\WebhookStore;
-use SelcomDevelopers\Selcom\Exception\ConfigurationException;
 use SelcomDevelopers\Selcom\Webhook\WebhookPayload;
 use SelcomDevelopers\Selcom\Webhook\WebhookVerdict;
 
@@ -86,6 +85,18 @@ final class WebhookHardeningTest extends TestCase
         [$server, $raw] = $this->sample($name, $withoutSignature);
 
         return $this->call('POST', self::URL, [], [], [], $server, $raw);
+    }
+
+    /**
+     * Simulate the queued confirmation having run to the end: its unique lock is released.
+     */
+    private function finishConfirmation(string $orderId): void
+    {
+        $key = 'laravel_unique_job:' . ConfirmOrderStatus::class . ':selcom-confirm:' . $orderId;
+        $cache = \Illuminate\Support\Facades\Cache::store();
+        $store = $cache->getStore();
+        \assert($store instanceof \Illuminate\Contracts\Cache\LockProvider);
+        $store->lock($key)->forceRelease();
     }
 
     // ---- 1. the redelivery after a 5xx is processed ----------------------------------------
@@ -161,6 +172,7 @@ final class WebhookHardeningTest extends TestCase
 
         $this->deliver('completed-signed', withoutSignature: true)->assertOk();
         self::assertSame('UNSIGNED', SelcomWebhookDelivery::query()->sole()->verdict);
+        $this->finishConfirmation('ORD-2001'); // the first confirmation job has run to the end
 
         $this->deliver('completed-signed')->assertOk();
 
@@ -225,25 +237,45 @@ final class WebhookHardeningTest extends TestCase
         $this->call('POST', self::URL, [], [], [], ['CONTENT_TYPE' => 'application/json'], '{"order_id":"ORD-99","transid":"TXN-99"}')->assertStatus(429);
     }
 
-    public function testTheBareDefaultPathIsNotRegistered(): void
+    public function testTheBareDefaultPathIsNotRegisteredAndIsReportedNotThrown(): void
     {
         $config = $this->app?->make(Repository::class);
         \assert($config instanceof Repository);
         $config->set('selcom.webhook.path', 'selcom/webhook');
+        $config->set('selcom.webhook.route_name', 'selcom.webhook.second');
+        $log = \Illuminate\Support\Facades\Log::spy();
 
-        $this->expectException(ConfigurationException::class);
-        $this->expectExceptionMessage('unguessable token');
         (new SelcomServiceProvider($this->app ?? throw new \LogicException()))->boot();
+
+        self::assertFalse(\Illuminate\Support\Facades\Route::has('selcom.webhook.second'));
+        $log->shouldHaveReceived('warning')->once();
     }
 
-    public function testAMissingPathIsNotRegisteredEither(): void
+    public function testAMissingPathIsNotRegisteredEitherAndTheApplicationKeepsWorking(): void
     {
         $config = $this->app?->make(Repository::class);
         \assert($config instanceof Repository);
         $config->set('selcom.webhook.path', null);
+        $config->set('selcom.webhook.route_name', 'selcom.webhook.second');
+        $log = \Illuminate\Support\Facades\Log::spy();
 
-        $this->expectException(ConfigurationException::class);
         (new SelcomServiceProvider($this->app ?? throw new \LogicException()))->boot();
+
+        self::assertFalse(\Illuminate\Support\Facades\Route::has('selcom.webhook.second'));
+        $log->shouldHaveReceived('warning')->once();
+        self::assertSame(0, \Illuminate\Support\Facades\Artisan::call('list'));
+    }
+
+    public function testRepeatedDeliveriesForTheSameOrderCannotFanOutIntoParallelPolls(): void
+    {
+        Queue::fake();
+        $this->app?->make(Repository::class)->set('selcom.webhook.store', 'none');
+
+        $this->deliver('completed-signed', withoutSignature: true)->assertOk();
+        $this->deliver('completed-signed', withoutSignature: true)->assertOk();
+        $this->deliver('completed-signed', withoutSignature: true)->assertOk();
+
+        Queue::assertPushed(ConfirmOrderStatus::class, 1);
     }
 
     public function testOversizedBodiesAreRefusedBeforeAnythingParsesThem(): void

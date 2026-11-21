@@ -170,7 +170,15 @@ final class SelcomServiceProvider extends ServiceProvider
     private function registerWebhookRoute(): void
     {
         $config = $this->app->make(ConfigRepository::class);
-        if ($config->get('selcom.webhook.enabled') !== true || $this->app->routesAreCached()) {
+        if ($config->get('selcom.webhook.enabled') !== true) {
+            return;
+        }
+
+        // The limiter is registered whether or not the routes are cached: a cached route still names it.
+        $limit = $config->get('selcom.webhook.rate_limit', 120);
+        RateLimiter::for('selcom-webhook', static fn (Request $request): Limit => Limit::perMinute(is_int($limit) && $limit > 0 ? $limit : 120)->by((string) $request->ip()));
+
+        if ($this->app->routesAreCached()) {
             return;
         }
 
@@ -178,14 +186,14 @@ final class SelcomServiceProvider extends ServiceProvider
         $middleware = $config->get('selcom.webhook.middleware', []);
         $name = $config->get('selcom.webhook.route_name', 'selcom.webhook');
         if (!is_string($path) || trim($path, '/') === '' || trim($path, '/') === 'selcom/webhook') {
-            throw new ConfigurationException(
-                'The webhook is enabled but "selcom.webhook.path" (SELCOM_WEBHOOK_PATH) is empty or the bare default. '
-                . 'Set a path with an unguessable token, for example "selcom/webhook/<random>". The route was not registered.',
+            // Do not take the application (or artisan) down for it: report it and leave the route out.
+            $this->app->make('log')->warning(
+                'selcom: the webhook is enabled but "selcom.webhook.path" (SELCOM_WEBHOOK_PATH) is empty or the bare default, '
+                . 'so the route was NOT registered. Set a path with an unguessable token, for example "selcom/webhook/<random>".',
             );
-        }
 
-        $limit = $config->get('selcom.webhook.rate_limit', 120);
-        RateLimiter::for('selcom-webhook', static fn (Request $request): Limit => Limit::perMinute(is_int($limit) && $limit > 0 ? $limit : 120)->by((string) $request->ip()));
+            return;
+        }
 
         // The gateway sends no CSRF token and no session, so the route is registered outside the
         // "web" group; whatever you list in `selcom.webhook.middleware` is all that runs.
