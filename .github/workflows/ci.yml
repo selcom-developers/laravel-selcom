@@ -46,12 +46,7 @@ jobs:
 
       - name: Pin the Laravel line
         run: >
-          composer require --no-update --no-interaction
-          "illuminate/cache:${{ matrix.laravel }}" "illuminate/console:${{ matrix.laravel }}"
-          "illuminate/contracts:${{ matrix.laravel }}" "illuminate/database:${{ matrix.laravel }}"
-          "illuminate/events:${{ matrix.laravel }}" "illuminate/http:${{ matrix.laravel }}"
-          "illuminate/queue:${{ matrix.laravel }}" "illuminate/routing:${{ matrix.laravel }}"
-          "illuminate/support:${{ matrix.laravel }}" &&
+          composer require --no-update --no-interaction "laravel/framework:${{ matrix.laravel }}" &&
           composer require --dev --no-update --no-interaction "orchestra/testbench:${{ matrix.testbench }}"
 
       - name: Install dependencies

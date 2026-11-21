@@ -27,11 +27,7 @@ You keep control at every layer. The signer, the transport, the client, the repl
 
 Requirements: Laravel 12 (PHP 8.2 to 8.5) or Laravel 13 (PHP 8.3 to 8.5). CI runs exactly those pairs.
 
-```
-composer require selcom-developers/laravel-selcom
-```
-
-`selcom-php` is pulled in as a dependency. Composer reads `repositories` only from your own application's `composer.json`, so make sure it can find that package there:
+Until `selcom-php` is on Packagist, your application must add its repository to its own `composer.json` first (Composer reads `repositories` only from the root project, never from a dependency):
 
 ```json
 {
@@ -39,6 +35,12 @@ composer require selcom-developers/laravel-selcom
         { "type": "vcs", "url": "https://github.com/selcom-developers/selcom-php" }
     ]
 }
+```
+
+Then:
+
+```
+composer require selcom-developers/laravel-selcom
 ```
 
 The HTTP layer is PSR-18 and found by discovery; a Laravel application already has Guzzle, so nothing else is needed.
