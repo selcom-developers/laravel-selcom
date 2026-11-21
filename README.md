@@ -2,9 +2,11 @@
 
 Laravel integration for the Selcom API gateway, built on [`selcom-developers/selcom-php`](https://github.com/selcom-developers/selcom-php): environment-driven config, container bindings you can replace, an opt-in webhook route, optional models with a final-state guard, artisan commands, logging and testing helpers.
 
-> **Not affiliated with Selcom Paytech Ltd.** This is a community project. "Selcom" names the API it talks to. For API access, credentials, contracts and support, go to Selcom: <https://developers.selcommobile.com/>. Where this README and Selcom's portal disagree about the API, the portal wins.
+Documentation: <https://selcom-developers.github.io/>
 
-You keep control at every layer. The signer, the transport, the client, the replay store, the webhook store, the models and the commands are separate pieces; each is a container binding you can swap, and each works without the others. The rules the client follows (signing, result codes, retries, webhooks) live in the shared spec: <https://github.com/selcom-developers/selcom-spec> (tested against `v0.2.1`, recorded in [`SPEC_VERSION`](SPEC_VERSION)).
+> **Not affiliated with Selcom Paytech Ltd.** For API access, credentials, contracts and support, go to Selcom: <https://developers.selcommobile.com/>.
+
+The rules the client follows (signing, result codes, retries, webhooks) live in the shared spec: <https://github.com/selcom-developers/selcom-spec> (tested against `v0.2.1`, recorded in [`SPEC_VERSION`](SPEC_VERSION)).
 
 ## Contents
 
@@ -23,7 +25,7 @@ You keep control at every layer. The signer, the transport, the client, the repl
 
 ## Install
 
-Requirements: Laravel 12 (PHP 8.2 to 8.5) or Laravel 13 (PHP 8.3 to 8.5). CI runs exactly those pairs.
+Requirements: Laravel 12 (PHP 8.2 to 8.5) or Laravel 13 (PHP 8.3 to 8.5).
 
 Until `selcom-php` is on Packagist, your application must add its repository to its own `composer.json` first (Composer reads `repositories` only from the root project, never from a dependency):
 
@@ -76,8 +78,6 @@ SELCOM_TIMEOUT_PAYMENT_READ=180
 - A missing key, secret or vendor fails the same way. Giving only half of the checkout pair is an error, not a silent fallback.
 - Timeouts are per profile and no request runs without one. The long read timeout on payments is deliberate: timing out early does not stop the payment, it turns a known answer into an unknown one.
 - The secret, the PIN and the full API key never appear in `print_r`, `var_dump`, logs or exception messages of the objects this package binds.
-
-The webhook, logging, model and reconcile settings are described in their own sections below; the config file comments say the same.
 
 ## Using the client
 
@@ -181,7 +181,7 @@ All in `SelcomDevelopers\LaravelSelcom\Events`:
 | `ConflictingResultFlagged` | A result contradicted a final state; the state was kept and the record flagged `needs_review` |
 | `RecordReconciled` | `selcom:reconcile` queried a record and applied the answer |
 
-Listeners must key on the transition: fulfil from `OrderSucceeded` (and keep your fulfilment idempotent on the order). Without the orders table there is no guard and no transition event; then do your own compare-and-set on your order in the `OrderStatusConfirmed` listener.
+Without the orders table there is no guard and no transition event; then do your own compare-and-set on your order in the `OrderStatusConfirmed` listener.
 
 Make the `OrderSucceeded` listener a **queued** listener (`implements ShouldQueue`) and idempotent. The guard commits success first and fires the event once: if a synchronous listener throws, the order is already final and nothing fires the event again, so a failed fulfilment would be lost. A queued listener has its own retries and failed-job table.
 
@@ -317,7 +317,6 @@ The suite runs every case and reject in `signing.json`, every response scenario 
 
 ## Security
 
-- No secret is ever written to a log, a dump, an exception message or a stored webhook; the stored body and headers are redacted.
 - Keep `.env` out of version control. Report problems privately: see [SECURITY.md](SECURITY.md).
 
 ## Licence
