@@ -2,13 +2,11 @@
 
 Laravel integration for the Selcom API gateway, built on [`selcom-developers/selcom-php`](https://github.com/selcom-developers/selcom-php): environment-driven config, container bindings you can replace, an opt-in webhook route, optional models with a final-state guard, artisan commands, logging and testing helpers.
 
-> **Status: not yet published to Packagist.** Version 0.1.0 is unreleased. Until it is published, install from the repository (see [Install](#install)).
->
 > **v1 is a full rewrite.** Earlier versions of this repository (`jasirilabs/laravel-selcom`, Laravel 9) were written by Bruno Alfred and released under the MIT licence. v1 shares no code with them: it is written from scratch against the shared spec and released under the Apache License 2.0. Earlier versions stay in the git history.
 >
 > **Not affiliated with Selcom Paytech Ltd.** This is a community project. "Selcom" names the API it talks to. For API access, credentials, contracts and support, go to Selcom: <https://developers.selcommobile.com/>. Where this README and Selcom's portal disagree about the API, the portal wins.
 
-You keep control at every layer. The signer, the transport, the client, the replay store, the webhook store, the models and the commands are separate pieces; each is a container binding you can swap, and each works without the others. The rules the client follows (signing, result codes, retries, webhooks) live in the shared spec: <https://github.com/selcom-developers/selcom-spec> (tested against `v0.1.0`, recorded in [`SPEC_VERSION`](SPEC_VERSION)).
+You keep control at every layer. The signer, the transport, the client, the replay store, the webhook store, the models and the commands are separate pieces; each is a container binding you can swap, and each works without the others. The rules the client follows (signing, result codes, retries, webhooks) live in the shared spec: <https://github.com/selcom-developers/selcom-spec> (tested against `v0.2.1`, recorded in [`SPEC_VERSION`](SPEC_VERSION)).
 
 ## Contents
 
@@ -29,21 +27,21 @@ You keep control at every layer. The signer, the transport, the client, the repl
 
 Requirements: Laravel 12 (PHP 8.2 to 8.5) or Laravel 13 (PHP 8.3 to 8.5). CI runs exactly those pairs.
 
-Neither this package nor `selcom-php` is on Packagist yet, so require both from their repositories. In your application's `composer.json`:
+```
+composer require selcom-developers/laravel-selcom
+```
+
+`selcom-php` is pulled in as a dependency. Composer reads `repositories` only from your own application's `composer.json`, so make sure it can find that package there:
 
 ```json
 {
     "repositories": [
-        { "type": "vcs", "url": "https://github.com/selcom-developers/selcom-php" },
-        { "type": "vcs", "url": "https://github.com/selcom-developers/laravel-selcom" }
-    ],
-    "require": {
-        "selcom-developers/laravel-selcom": "dev-feat/v1"
-    }
+        { "type": "vcs", "url": "https://github.com/selcom-developers/selcom-php" }
+    ]
 }
 ```
 
-(`dev-main` once v1 is merged.) The HTTP layer is PSR-18 and found by discovery; a Laravel application already has Guzzle, so nothing else is needed.
+The HTTP layer is PSR-18 and found by discovery; a Laravel application already has Guzzle, so nothing else is needed.
 
 The service provider and the `Selcom` facade register themselves through package discovery. Publish the config:
 
@@ -144,7 +142,7 @@ and send the URL on every order as `webhookUrl` (the request classes base64-enco
 
 What the controller does, in order (the spec's handling steps):
 
-1. Reads the raw body before anything parses it, and verifies it with selcom-php's `WebhookVerifier`.
+1. Reads the raw body before anything parses it, and verifies it with selcom-php's `WebhookVerifier`. If the replay store itself fails (a cache outage), it answers **500** so the gateway delivers again.
 2. Fires `WebhookReceived`, then the verdict event.
 3. `INVALID` and `STALE` answer **401** and stop. `REPLAY` answers 200 and stops. `VALID` and `UNSIGNED` continue.
 4. Stores the delivery (redacted) through the `WebhookStore`. A duplicate of an already stored `(order_id, transid)` is acknowledged and stops.
@@ -162,7 +160,7 @@ Unknown or unparseable fields in an unsigned body (an odd `amount`, say) never m
 | `selcom.webhook.store` | `none` (default) or `database` (needs the migrations). The unique `(order_id, transid)` key is the durable guard. |
 | `selcom.webhook.confirm` | Queue the order-status confirmation. Use a real queue connection: the `sync` driver runs it inside the request. |
 
-The replay guard is one atomic cache `add` per digest. It keeps each digest for twice the window, which always covers the accepted clock distance.
+The replay guard is one atomic cache `add` per digest. It keeps each digest until max(now, signed time) + window, the time the verifier hands it.
 
 ### Webhook and domain events
 
@@ -288,7 +286,7 @@ composer install
 composer check      # validate, Larastan (level 8), PHPUnit
 ```
 
-The suite runs every case and reject in `signing.json` (20 and 11), every response scenario (120) and every webhook sample (11) from the copy of the spec vectors in `resources/vectors`, without network. `scripts/refresh-spec.sh [tag]` refreshes that copy and rewrites `SPEC_VERSION`; CI checks the copy is byte-identical to the spec at that tag.
+The suite runs every case and reject in `signing.json` (20 and 11), every response scenario (120) and every webhook sample (15) from the copy of the spec vectors in `resources/vectors`, without network. `scripts/refresh-spec.sh [tag]` refreshes that copy and rewrites `SPEC_VERSION`; CI checks the copy is byte-identical to the spec at that tag.
 
 ## Security
 
