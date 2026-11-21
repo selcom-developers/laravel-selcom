@@ -2,8 +2,6 @@
 
 Laravel integration for the Selcom API gateway, built on [`selcom-developers/selcom-php`](https://github.com/selcom-developers/selcom-php): environment-driven config, container bindings you can replace, an opt-in webhook route, optional models with a final-state guard, artisan commands, logging and testing helpers.
 
-> **v1 is a full rewrite.** Earlier versions of this repository (`jasirilabs/laravel-selcom`, Laravel 9) were written by Bruno Alfred and released under the MIT licence. v1 shares no code with them: it is written from scratch against the shared spec and released under the Apache License 2.0. Earlier versions stay in the git history.
->
 > **Not affiliated with Selcom Paytech Ltd.** This is a community project. "Selcom" names the API it talks to. For API access, credentials, contracts and support, go to Selcom: <https://developers.selcommobile.com/>. Where this README and Selcom's portal disagree about the API, the portal wins.
 
 You keep control at every layer. The signer, the transport, the client, the replay store, the webhook store, the models and the commands are separate pieces; each is a container binding you can swap, and each works without the others. The rules the client follows (signing, result codes, retries, webhooks) live in the shared spec: <https://github.com/selcom-developers/selcom-spec> (tested against `v0.2.1`, recorded in [`SPEC_VERSION`](SPEC_VERSION)).
@@ -161,10 +159,12 @@ Unknown or unparseable fields in an unsigned body (an odd `amount`, say) never m
 | `selcom.webhook.cache_store` | Cache store behind the replay guard. Use a shared store (redis, database, memcached, file): `array` forgets per process, and PHP-FPM is a new process per request. |
 | `selcom.webhook.store` | `none` (default) or `database` (needs the migrations). The unique `(order_id, transid)` key is the durable guard. |
 | `selcom.webhook.confirm` | Queue the order-status confirmation. Use a real queue connection: the `sync` driver runs it inside the request. `confirm_interval_seconds` (180) and `confirm_window_minutes` (30) bound the re-checks. |
-| `selcom.webhook.path` | **Required**, with an unguessable token in it. The route is not registered (a `ConfigurationException` is thrown) when it is empty or the bare `selcom/webhook`. |
+| `selcom.webhook.path` | **Required**, with an unguessable token in it. When it is empty or the bare `selcom/webhook`, the route is **not registered** and a warning is logged; the application and artisan keep working. |
 | `selcom.webhook.middleware`, `rate_limit` | Default: a throttle by client IP, `rate_limit` requests a minute (120). Add your own middleware, but keep the `web` group out: the gateway sends no CSRF token. |
 | `selcom.webhook.max_body_bytes` | Bodies above this (default 65536) are refused with 413 before anything parses or logs them. |
 | `selcom.webhook.refuse_unsigned` | Answer 401 to deliveries with no `Digest` header. Default off (the spec accepts them, and `order-status` confirmation is then the only protection); turn it on once you have seen that your deliveries are signed. |
+
+**Behind a load balancer or proxy**, the throttle keys on the client IP Laravel sees. Configure your trusted proxies (`TrustProxies`, in `bootstrap/app.php` through `$middleware->trustProxies(...)`) so that `$request->ip()` is the gateway's address and not the proxy's; otherwise every delivery shares one bucket.
 
 The replay guard is one atomic cache `add` per digest. It keeps each digest until max(now, signed time) + window, the time the verifier hands it.
 
@@ -182,6 +182,8 @@ All in `SelcomDevelopers\LaravelSelcom\Events`:
 | `RecordReconciled` | `selcom:reconcile` queried a record and applied the answer |
 
 Listeners must key on the transition: fulfil from `OrderSucceeded` (and keep your fulfilment idempotent on the order). Without the orders table there is no guard and no transition event; then do your own compare-and-set on your order in the `OrderStatusConfirmed` listener.
+
+Make the `OrderSucceeded` listener a **queued** listener (`implements ShouldQueue`) and idempotent. The guard commits success first and fires the event once: if a synchronous listener throws, the order is already final and nothing fires the event again, so a failed fulfilment would be lost. A queued listener has its own retries and failed-job table.
 
 Events can be queued or broadcast, so what they serialise is redacted: results and webhook payloads are replaced by copies with personal data masked and raw bodies redacted. The live event in the running process keeps the originals.
 
@@ -242,7 +244,13 @@ php artisan selcom:reconcile --older-than=10 --type=payouts --limit=50
 php artisan selcom:reconcile --dry-run
 ```
 
-`selcom:status` is read-only. `selcom:reconcile` is **query only**: it has no code path that sends a payment, an order, a cancel or any other write. It finds records in `pending` or `not_found` (orders) or `submitting`, `pending`, `ambiguous` (payouts) whose `updated_at` is older than N minutes (default 3, the spec's first-poll delay). Three bounds keep it honest: a `not_found` order is polled for `reconcile.not_found_max_age_minutes` (60) from creation, then flagged `needs_review` and left alone; a `submitting` payout is not queried until the payment timeout (connect + read) plus `submitting_margin_seconds` (30) has passed, since its request may still be in flight; and any record flagged `needs_review` has been handed to a person and is not polled again, asks the gateway with `orderStatus`, `utilityQuery` or `walletCashinQuery`, and applies the answer through the guard. A query that gets no answer leaves the record exactly as it was, and the next run asks again.
+`selcom:status` is read-only. `selcom:reconcile` is **query only**: it has no code path that sends a payment, an order, a cancel or any other write. It finds records in `pending` or `not_found` (orders) or `submitting`, `pending`, `ambiguous` (payouts) whose `updated_at` is older than N minutes (default 3, the spec's first-poll delay), asks the gateway with `orderStatus`, `utilityQuery` or `walletCashinQuery`, and applies the answer through the guard. A query that gets no answer leaves the record exactly as it was, and the next run asks again. If a listener throws while an answer is applied, the failure is reported, that record is listed as an error, and the run carries on with the next one.
+
+Polling is bounded, so that abandoned rows cannot crowd out real ones:
+
+- a `pending` order is polled for `reconcile.pending_max_age_minutes` (2880, from creation) and a `not_found` order for `reconcile.not_found_max_age_minutes` (60); after that the row is flagged `needs_review` and left alone;
+- a `submitting` payout is not queried until the payment timeout (connect + read) plus `reconcile.submitting_margin_seconds` (30) has passed, since its request may still be in flight;
+- any record flagged `needs_review` has been handed to a person and is not polled again.
 
 Schedule it:
 
@@ -314,4 +322,4 @@ The suite runs every case and reject in `signing.json` (20 and 11), every respon
 
 ## Licence
 
-Apache License 2.0, see [LICENSE](LICENSE). Earlier versions (before v1) by Bruno Alfred, MIT.
+Apache License 2.0, see [LICENSE](LICENSE).

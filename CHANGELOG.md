@@ -8,8 +8,6 @@ All notable changes to this project are documented in this file. The format foll
 
 First release of v1.
 
-**v1 is a full rewrite.** Earlier versions of this repository (`jasirilabs/laravel-selcom`, Laravel 9) were written by Bruno Alfred and released under the MIT licence. v1 shares no code with them: it is a clean-room package named `selcom-developers/laravel-selcom`, built on `selcom-developers/selcom-php` and released under the Apache License 2.0. Earlier versions remain in the git history.
-
 ### Added
 
 - Laravel 12 (PHP 8.2 to 8.5) and Laravel 13 (PHP 8.3 to 8.5).
@@ -25,6 +23,7 @@ First release of v1.
 - Webhook route behaviour: events fire after the delivery is stored (a throwing listener is reported, never a 5xx); the replay digest is forgotten when a delivery is answered with 5xx; a stronger verdict (VALID over UNSIGNED) upgrades the stored row and queues confirmation again; a per-client throttle, a body size limit, an optional refusal of unsigned deliveries, and no route unless `SELCOM_WEBHOOK_PATH` carries a token.
 - `ConfirmOrderStatus` re-checks `PENDING` and `AMBIGUOUS` orders every 3 minutes for a bounded window and applies the answer through the guard; `OrderStatusConfirmed` carries the guard's outcome; `OrderSucceeded` and `PayoutSucceeded` fire once, at the transition to success.
 - Guard checks: the paid amount and currency must match the order, a result must belong to the record (`ResultMismatchException`), and a submit `FAILED` is not finalised for a payout last seen as not found or ambiguous.
+- The webhook throttle limiter is registered even when routes are cached; the confirmation job is unique per order, backs off after an exception and fails on errors that retrying cannot fix; pending orders are polled for a bounded time; reconcile carries on when a listener throws; a missing webhook path logs a warning and skips the route instead of stopping the application.
 - Reconcile bounds: `not_found` orders are polled for a bounded time and records flagged for review are skipped; `submitting` payouts wait out the payment timeout.
 - Events serialise redacted results and payloads; the fake's recorded requests mask the PIN, secrets and card tokens.
 
